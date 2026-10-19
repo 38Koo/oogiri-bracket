@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "source": {},
+  "resolved": {
+    "durable_objects": {
+      "bindings": [
+        {
+          "name": "TOURNAMENT",
+          "class_name": "TournamentDurableObject"
+        }
+      ]
+    },
+    "migrations": [
+      {
+        "tag": "void-durable-tournament-v1",
+        "new_sqlite_classes": [
+          "TournamentDurableObject"
+        ]
+      }
+    ]
+  },
+  "text": "{\n  \"durable_objects\": {\n    \"bindings\": [\n      {\n        \"name\": \"TOURNAMENT\",\n        \"class_name\": \"TournamentDurableObject\"\n      }\n    ]\n  },\n  \"migrations\": [\n    {\n      \"tag\": \"void-durable-tournament-v1\",\n      \"new_sqlite_classes\": [\n        \"TournamentDurableObject\"\n      ]\n    }\n  ]\n}\n"
+}
