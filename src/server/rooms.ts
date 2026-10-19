@@ -1,5 +1,5 @@
 import { answers, matches, participants, rooms, type Match } from "@schema";
-import { and, asc, eq, isNull, sql, type db as defaultDb } from "void/db";
+import { and, asc, count, eq, isNull, sql, type db as defaultDb } from "void/db";
 import { buildBracket, isBye, nextPlayable, nextSlot, roundCount } from "../lib/bracket";
 import { sha256 } from "../lib/ids";
 import type { Judge } from "../lib/judge";
@@ -30,10 +30,12 @@ export async function loadRoomView(db: Db, roomId: string): Promise<RoomView | n
       .select({
         id: participants.id,
         nickname: participants.nickname,
-        answerCount: sql<number>`(select count(*) from ${answers} where ${answers.participantId} = ${participants.id})`,
+        answerCount: count(answers.id),
       })
       .from(participants)
+      .leftJoin(answers, eq(answers.participantId, participants.id))
       .where(eq(participants.roomId, roomId))
+      .groupBy(participants.id)
       .orderBy(asc(participants.createdAt)),
     room.status === "collecting"
       ? Promise.resolve([])
