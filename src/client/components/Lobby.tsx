@@ -3,7 +3,7 @@ import { fetch } from "void/client";
 import type { Credentials } from "../credentials";
 import { authHeaders, errorMessage, saveCredentials } from "../credentials";
 import { LIMITS, type RoomView } from "../../lib/types";
-import { Zabuton } from "./Zabuton";
+import { AnswerDots } from "./AnswerDots";
 import { startBlocker } from "../../lib/rules";
 
 type Props = {
@@ -38,9 +38,9 @@ export function Lobby({ view, credentials, onJoined }: Props) {
             <li key={p.id}>
               <span>
                 {p.nickname}
-                {p.id === view.room.hostParticipantId && "（出題者）"}
+                {p.id === view.room.hostParticipantId && <span className="host">出題者</span>}
               </span>
-              <Zabuton count={p.answerCount} limit={limit} />
+              <AnswerDots count={p.answerCount} limit={limit} />
             </li>
           ))}
         </ul>
@@ -67,15 +67,15 @@ function ShareLink({ roomId }: { roomId: string }) {
   }
 
   return (
-    <>
+    <div className="share-link">
       <label htmlFor="share">このお題の URL を送って参加してもらう</label>
-      <div className="share">
+      <div className="row">
         <input id="share" type="text" readOnly value={url} onFocus={(e) => e.currentTarget.select()} />
-        <button type="button" className="btn btn-quiet" onClick={copy}>
+        <button type="button" className="btn btn-secondary" onClick={copy}>
           {copied ? "コピーしました" : "コピー"}
         </button>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -102,7 +102,7 @@ function JoinForm({ roomId, onJoined }: { roomId: string; onJoined: (c: Credenti
     <form onSubmit={onSubmit}>
       <h2>参加する</h2>
       <label htmlFor="nickname">ニックネーム</label>
-      <div className="answer-form">
+      <div className="row">
         <input
           id="nickname"
           type="text"
@@ -168,7 +168,7 @@ function MyAnswers({ roomId, credentials, limit }: { roomId: string; credentials
           <label htmlFor="answer" className="visually-hidden">
             回答
           </label>
-          <div className="answer-form">
+          <div className="row">
             <input
               id="answer"
               type="text"

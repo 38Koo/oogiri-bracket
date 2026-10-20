@@ -16,7 +16,7 @@ export function roundName(round: number, totalRounds: number) {
   return `${round + 1} 回戦`;
 }
 
-/** 今まさに判定中の 1 試合を大きく見せる舞台。判定開始で幕が開く。 */
+/** いま判定している 1 試合を大きく見せる */
 export function Stage({ spotlight, matches, answerOf, totalRounds }: Props) {
   const match = spotlight
     ? spotlight.phase === "decided"
@@ -31,31 +31,34 @@ export function Stage({ spotlight, matches, answerOf, totalRounds }: Props) {
   const state = (id: number | null) => (!decided ? "" : decided.winnerAnswerId === id ? "won" : "lost");
 
   return (
-    <section className={`stage${match ? " open" : ""}`} aria-live="polite">
-      <div className="stage-inner">
+    <section className="stage" aria-live="polite">
+      <p className="round">{match ? roundName(match.round, totalRounds) : "次の対戦を準備しています"}</p>
+      <div className="versus">
         <div className={`fighter ${state(match?.answerAId ?? null)}`}>
           <div className="text">{a?.text ?? "　"}</div>
-          <div className="who">{a?.nickname}</div>
+          <div className="who">{a?.nickname ?? "　"}</div>
         </div>
         <div className="vs" aria-hidden="true">
           対
         </div>
         <div className={`fighter ${state(match?.answerBId ?? null)}`}>
           <div className="text">{b?.text ?? "　"}</div>
-          <div className="who">{b?.nickname}</div>
+          <div className="who">{b?.nickname ?? "　"}</div>
         </div>
       </div>
-      <div className="meter" role="img" aria-label={decided ? `左 ${pctA}%、右 ${100 - pctA}%` : "判定前"}>
-        <span style={{ width: `${pctA}%` }} />
+      <div
+        className={`meter${match && !decided ? " waiting" : ""}`}
+        role="img"
+        aria-label={decided ? `左 ${pctA}%、右 ${100 - pctA}%` : "判定中"}
+      >
+        <span style={decided ? { width: `${pctA}%` } : undefined} />
       </div>
-      <p className="status">
-        {!match && "次の取り組みを待っています"}
-        {match && !decided && `${roundName(match.round, totalRounds)}　Jev が判定しています…`}
-        {spotlight?.phase === "judging" && spotlight.note && <small className="mock-note">{spotlight.note}</small>}
+      <p className="result">
+        {match && !decided && "Jev が判定しています"}
         {decided && `${answerOf(decided.winnerAnswerId)?.text} の勝ち（${Math.max(pctA, 100 - pctA)}%）`}
-        {decided?.judge === "mock" && <small className="mock-note">Jev の API キーが未設定のため、仮の判定です</small>}
       </p>
-      <div className="curtain" aria-hidden="true" />
+      {spotlight?.phase === "judging" && spotlight.note && <small className="note">{spotlight.note}</small>}
+      {decided?.judge === "mock" && <small className="note">Jev の API キーが未設定のため、仮の判定です</small>}
     </section>
   );
 }

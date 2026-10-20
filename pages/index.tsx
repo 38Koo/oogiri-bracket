@@ -30,14 +30,9 @@ export default function HomePage() {
   return (
     <div className="home">
       <section>
-        <h1>お題を出して、回答どうしを勝ち抜き戦に。</h1>
+        <h1>お題を出したら、あとは回答どうしが勝手に戦います。</h1>
         <p className="lede">
-          みんなが出した回答を、判定 AI の Jev が 1 試合ずつ裁きます。どの回答が勝ち上がるか、同じ画面を見ながら盛り上がりましょう。
-        </p>
-        <p className="example">
-          お題 <strong>強そうな名前ランキング</strong>
-          <br />
-          回答 <strong>キング</strong>、<strong>クイーン</strong>、<strong>ジャック</strong>
+          集まった大喜利の回答を、AI の Jev が 1 試合ずつ判定。どの回答が勝ち上がるか、みんなで同じ画面を見ながら楽しめます。
         </p>
       </section>
 
@@ -64,7 +59,7 @@ export default function HomePage() {
             value={nickname}
             onChange={(e) => setNickname(e.target.value)}
           />
-          <p className="hint">お題を出した人がトーナメントを開始できます。</p>
+          <p className="hint">お題を出した人が、トーナメントを始められます。</p>
         </div>
         <div>
           <label htmlFor="limit">1 人あたりの回答数</label>
