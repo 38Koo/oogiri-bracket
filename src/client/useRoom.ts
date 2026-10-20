@@ -14,7 +14,7 @@ export const TIMING = {
 } as const;
 
 export type Spotlight =
-  | { phase: "judging"; matchId: number }
+  | { phase: "judging"; matchId: number; note?: string }
   | { phase: "decided"; matchId: number; match: PublicMatch };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -75,8 +75,20 @@ export function useRoom(initial: RoomView) {
         setView(event.view);
         return;
       case "match_judging":
-        setSpotlight({ phase: "judging", matchId: event.matchId });
+        setSpotlight((s) =>
+          // 再試行で同じ試合の判定開始が再送されたときは、待ちの注記を残す
+          s?.phase === "judging" && s.matchId === event.matchId ? s : { phase: "judging", matchId: event.matchId },
+        );
         if (!fast) await sleep(TIMING.judging);
+        return;
+      case "match_delayed":
+        setSpotlight({
+          phase: "judging",
+          matchId: event.matchId,
+          note: event.fallback
+            ? "Jev から応答がないため、この試合は仮の判定で進めます"
+            : "Jev の応答が遅れています。もう一度判定しています",
+        });
         return;
       case "match_decided":
         setSpotlight({ phase: "decided", matchId: event.match.id, match: event.match });

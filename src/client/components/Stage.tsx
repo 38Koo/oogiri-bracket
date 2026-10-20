@@ -51,6 +51,7 @@ export function Stage({ spotlight, matches, answerOf, totalRounds }: Props) {
       <p className="status">
         {!match && "次の取り組みを待っています"}
         {match && !decided && `${roundName(match.round, totalRounds)}　Jev が判定しています…`}
+        {spotlight?.phase === "judging" && spotlight.note && <small className="mock-note">{spotlight.note}</small>}
         {decided && `${answerOf(decided.winnerAnswerId)?.text} の勝ち（${Math.max(pctA, 100 - pctA)}%）`}
         {decided?.judge === "mock" && <small className="mock-note">Jev の API キーが未設定のため、仮の判定です</small>}
       </p>
