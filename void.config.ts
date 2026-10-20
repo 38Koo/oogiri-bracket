@@ -6,7 +6,7 @@ export default defineConfig({
     "compatibility_date": "2026-02-24"
   },
   "head": {
-    "titleTemplate": "%s | 大喜利ブラケット",
+    "titleTemplate": "%s | 勝手に大喜利トーナメント",
     "htmlAttrs": { "lang": "ja" },
     "meta": [
       { "charset": "utf-8" },
