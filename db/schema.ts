@@ -14,6 +14,8 @@ export const rooms = sqliteTable("rooms", {
   id: text("id").primaryKey(),
   topic: text("topic").notNull(),
   hostParticipantId: text("host_participant_id").notNull(),
+  /** 1 人あたりの回答数の上限。null は制限なし (出題者がお題作成時に決める) */
+  maxAnswersPerParticipant: integer("max_answers_per_participant"),
   status: text("status", { enum: ["collecting", "running", "finished"] })
     .notNull()
     .default("collecting"),

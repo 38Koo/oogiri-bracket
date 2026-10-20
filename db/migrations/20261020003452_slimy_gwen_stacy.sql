@@ -1,0 +1,1 @@
+ALTER TABLE `rooms` ADD `max_answers_per_participant` integer;
