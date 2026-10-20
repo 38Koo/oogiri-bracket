@@ -140,7 +140,8 @@ export function useRoom(initial: RoomView) {
     document.addEventListener("visibilitychange", onVisible);
     return () => {
       document.removeEventListener("visibilitychange", onVisible);
-      void unsubscribe?.();
+      // close() の後に解除が終わると "stream is closed" で reject されるので握りつぶす
+      unsubscribe?.().catch(() => {});
       stream.close();
     };
   }, [roomId, drain, resync]);
