@@ -22,6 +22,7 @@ pnpm install
 pnpm dev          # http://localhost:5173
 pnpm test         # ロジックのユニットテスト (Void ランタイムを使わない)
 pnpm typecheck
+pnpm moderation:check   # 不適切判定を本物の Jev で試す (しきい値の調整用)
 ```
 
 ### 環境変数 (`.env`)
@@ -31,6 +32,8 @@ pnpm typecheck
 | `TYPESAFE_API_KEY` | 任意 | Jev の API キー。未設定だと**仮判定 (ランダム)** で進行する。演出の確認用 |
 | `JEV_MODEL`        | 任意 | 例: `jev-1.13.0`。未設定なら SDK の既定モデルを使う                          |
 | `JEV_TIMEOUT_MS`   | 任意 | Jev 1 回の呼び出しを待つ上限。既定 15000                                      |
+| `MODERATION_THRESHOLD` | 任意 | お題・ニックネームを不適切として弾く確率 (0〜1)。既定 0.7                    |
+| `TYPESAFE_BASE_URL` | 任意 | TypeSafe API の向き先。テスト用の偽サーバーに向けるとき                    |
 
 `void/env` が読むのはルートの `.env` だけです (`.env.example` を置くと dev server が起動しません)。
 本番では `void secret put TYPESAFE_API_KEY` で設定します。
@@ -71,4 +74,5 @@ src/client/duckdb.ts         DuckDB-wasm の起動 (wasm は jsDelivr から読�
 - **匿名参加**: アカウントは作らず、ルームごとに参加者 ID と秘密トークンを発行する。トークンは localStorage に保存し、DB にはハッシュだけを持つ
 - **1 試合ずつのライブ判定**: Durable Object が直列に判定するので、同じ試合を二重に判定しない
 - **DB は D1 (行指向)**: DuckDB は閲覧側の分析専用で、`/api/stats/matches` の結果をブラウザで集計する
+- **不適切な表現の確認**: お題とニックネームは作成・参加時に Jev の noul で確認し、しきい値以上なら 400 で弾く。Jev に届かないときは遊びを止めないよう通してログに残す
 - **集計はオプトイン**: 参加者ごとの `share_stats` (既定 false) が true の回答だけを集計に出す。お題の文言は出題者が載せたときだけ出す
