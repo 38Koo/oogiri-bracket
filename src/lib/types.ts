@@ -46,6 +46,8 @@ export type RoomEvent =
   | { type: "answer_submitted"; participantId: string; answerCount: number }
   | { type: "tournament_started"; view: RoomView }
   | { type: "match_judging"; matchId: number }
+  /** Jev の判定が失敗し、少し待って再試行する (fallback=true なら次は仮判定) */
+  | { type: "match_delayed"; matchId: number; attempt: number; fallback: boolean }
   | { type: "match_decided"; match: PublicMatch; next: PublicMatch | null }
   | { type: "tournament_finished"; championAnswerId: number };
 
