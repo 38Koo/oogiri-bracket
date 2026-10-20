@@ -98,7 +98,8 @@ label {
   margin-bottom: 0.3rem;
 }
 
-input[type="text"] {
+input[type="text"],
+select {
   width: 100%;
   font: inherit;
   font-size: var(--step-1);
@@ -648,4 +649,10 @@ pre.sql {
   font-size: var(--step--1);
   overflow-x: auto;
   line-height: 1.5;
+}
+
+.zabuton-count {
+  font-size: var(--step--1);
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
 }

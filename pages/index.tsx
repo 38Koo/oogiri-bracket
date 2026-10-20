@@ -2,12 +2,14 @@ import { useRouter } from "@void/react";
 import { useState } from "react";
 import { fetch } from "void/client";
 import { errorMessage, saveCredentials } from "../src/client/credentials";
+import { ANSWER_LIMIT_CHOICES } from "../src/lib/rules";
 import { LIMITS } from "../src/lib/types";
 
 export default function HomePage() {
   const router = useRouter();
   const [topic, setTopic] = useState("");
   const [nickname, setNickname] = useState("");
+  const [limit, setLimit] = useState<number | null>(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -16,7 +18,7 @@ export default function HomePage() {
     setPending(true);
     setError(null);
     try {
-      const created = await fetch("/api/rooms", { method: "POST", body: { topic, nickname } });
+      const created = await fetch("/api/rooms", { method: "POST", body: { topic, nickname, maxAnswersPerParticipant: limit } });
       saveCredentials(created.roomId, { participantId: created.participantId, token: created.token });
       router.visit(`/r/${created.roomId}`);
     } catch (e) {
@@ -63,6 +65,17 @@ export default function HomePage() {
             onChange={(e) => setNickname(e.target.value)}
           />
           <p className="hint">お題を出した人がトーナメントを開始できます。</p>
+        </div>
+        <div>
+          <label htmlFor="limit">1 人あたりの回答数</label>
+          <select id="limit" value={limit ?? ""} onChange={(e) => setLimit(e.target.value === "" ? null : Number(e.target.value))}>
+            {ANSWER_LIMIT_CHOICES.map((n) => (
+              <option key={n ?? "none"} value={n ?? ""}>
+                {n === null ? "制限なし" : `${n} つまで`}
+              </option>
+            ))}
+          </select>
+          <p className="hint">全体では {LIMITS.answersPerRoom} 件までです。</p>
         </div>
         {error && <p className="error">{error}</p>}
         <div>

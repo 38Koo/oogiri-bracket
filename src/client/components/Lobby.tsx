@@ -4,6 +4,7 @@ import type { Credentials } from "../credentials";
 import { authHeaders, errorMessage, saveCredentials } from "../credentials";
 import { LIMITS, type RoomView } from "../../lib/types";
 import { Zabuton } from "./Zabuton";
+import { startBlocker } from "../../lib/rules";
 
 type Props = {
   view: RoomView;
@@ -14,14 +15,16 @@ type Props = {
 export function Lobby({ view, credentials, onJoined }: Props) {
   const roomId = view.room.id;
   const isHost = credentials?.participantId === view.room.hostParticipantId;
+  const limit = view.room.maxAnswersPerParticipant;
   const totalAnswers = view.participants.reduce((n, p) => n + p.answerCount, 0);
+  const blocker = startBlocker(view.participants.map((p) => p.answerCount));
 
   return (
     <div className="lobby">
       <section>
         <ShareLink roomId={roomId} />
         {credentials ? (
-          <MyAnswers roomId={roomId} credentials={credentials} />
+          <MyAnswers roomId={roomId} credentials={credentials} limit={limit} />
         ) : (
           <JoinForm roomId={roomId} onJoined={onJoined} />
         )}
@@ -29,6 +32,7 @@ export function Lobby({ view, credentials, onJoined }: Props) {
 
       <aside>
         <h2>参加者 {view.participants.length} 人・回答 {totalAnswers} 件</h2>
+        <p className="hint">{limit === null ? "回答は 1 人何個でも出せます。" : `回答は 1 人 ${limit} つまでです。`}</p>
         <ul className="people">
           {view.participants.map((p) => (
             <li key={p.id}>
@@ -36,11 +40,11 @@ export function Lobby({ view, credentials, onJoined }: Props) {
                 {p.nickname}
                 {p.id === view.room.hostParticipantId && "（出題者）"}
               </span>
-              <Zabuton count={p.answerCount} />
+              <Zabuton count={p.answerCount} limit={limit} />
             </li>
           ))}
         </ul>
-        {isHost && <StartButton roomId={roomId} credentials={credentials!} totalAnswers={totalAnswers} />}
+        {isHost && <StartButton roomId={roomId} credentials={credentials!} blocker={blocker} />}
         {!isHost && <p className="hint">出題者がトーナメントを始めるまで、回答はほかの人には見えません。</p>}
       </aside>
     </div>
@@ -116,7 +120,7 @@ function JoinForm({ roomId, onJoined }: { roomId: string; onJoined: (c: Credenti
   );
 }
 
-function MyAnswers({ roomId, credentials }: { roomId: string; credentials: Credentials }) {
+function MyAnswers({ roomId, credentials, limit }: { roomId: string; credentials: Credentials; limit: number | null }) {
   const [mine, setMine] = useState<Array<{ id: number; text: string }>>([]);
   const [text, setText] = useState("");
   const [pending, setPending] = useState(false);
@@ -148,7 +152,7 @@ function MyAnswers({ roomId, credentials }: { roomId: string; credentials: Crede
     }
   }
 
-  const remaining = LIMITS.answersPerParticipant - mine.length;
+  const remaining = limit === null ? null : limit - mine.length;
   return (
     <section>
       <h2>あなたの回答</h2>
@@ -159,7 +163,7 @@ function MyAnswers({ roomId, credentials }: { roomId: string; credentials: Crede
           ))}
         </ul>
       )}
-      {remaining > 0 ? (
+      {remaining === null || remaining > 0 ? (
         <form onSubmit={onSubmit}>
           <label htmlFor="answer" className="visually-hidden">
             回答
@@ -178,7 +182,7 @@ function MyAnswers({ roomId, credentials }: { roomId: string; credentials: Crede
               回答する
             </button>
           </div>
-          <p className="hint">あと {remaining} つ出せます。</p>
+          <p className="hint">{remaining === null ? "思いつくだけ出せます。" : `あと ${remaining} つ出せます。`}</p>
         </form>
       ) : (
         <p className="hint">回答は出し切りました。開始を待ちましょう。</p>
@@ -188,7 +192,7 @@ function MyAnswers({ roomId, credentials }: { roomId: string; credentials: Crede
   );
 }
 
-function StartButton({ roomId, credentials, totalAnswers }: { roomId: string; credentials: Credentials; totalAnswers: number }) {
+function StartButton({ roomId, credentials, blocker }: { roomId: string; credentials: Credentials; blocker: string | null }) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -205,12 +209,10 @@ function StartButton({ roomId, credentials, totalAnswers }: { roomId: string; cr
 
   return (
     <div>
-      <button type="button" className="btn" disabled={pending || totalAnswers < 2} onClick={start}>
+      <button type="button" className="btn" disabled={pending || blocker !== null} onClick={start}>
         トーナメントを始める
       </button>
-      <p className="hint">
-        {totalAnswers < 2 ? "回答が 2 件そろうと始められます。" : "始めると回答の受付を締め切ります。"}
-      </p>
+      <p className="hint">{blocker ?? "始めると回答の受付を締め切ります。"}</p>
       {error && <p className="error">{error}</p>}
     </div>
   );
