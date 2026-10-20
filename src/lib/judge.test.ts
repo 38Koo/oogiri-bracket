@@ -42,6 +42,24 @@ describe("createJevJudge", () => {
   });
 });
 
+describe("タイムアウト", () => {
+  test("応答が返らないときは timeoutMs で諦め、SDK 内の再試行は maxRetries 回まで", async () => {
+    let calls = 0;
+    const hang = ((_url: string, init?: RequestInit) => {
+      calls++;
+      return new Promise<Response>((_, reject) =>
+        init?.signal?.addEventListener("abort", () => reject(new DOMException("aborted", "AbortError"))),
+      );
+    }) as typeof globalThis.fetch;
+
+    const judge = createJevJudge({ apiKey: "k", fetch: hang, timeoutMs: 50, maxRetries: 0 });
+    const started = Date.now();
+    await expect(judge(input)).rejects.toMatchObject({ name: "APITimeoutError" });
+    expect(Date.now() - started).toBeLessThan(1_000);
+    expect(calls).toBe(1);
+  });
+});
+
 describe("createMockJudge", () => {
   test("probA と勝者が整合する", async () => {
     for (const x of [0, 0.3, 0.6, 0.99]) {

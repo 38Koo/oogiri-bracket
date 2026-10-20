@@ -19,6 +19,10 @@ export type JudgeConfig = {
   apiKey?: string;
   model?: string;
   rng?: () => number;
+  /** 1 回の HTTP 呼び出しを待つ上限 (ミリ秒) */
+  timeoutMs?: number;
+  /** タイムアウト・5xx 時に SDK 内で再試行する回数 */
+  maxRetries?: number;
   /** テスト用に HTTP を差し替える */
   fetch?: typeof globalThis.fetch;
 };
@@ -29,9 +33,22 @@ export type JudgeConfig = {
  * 提示順による偏りを避けるため、毎回ランダムに左右を入れ替えて質問し、結果を元の A/B に戻す。
  * Jev はテキストを生成しないので、勝敗と確率だけが返る。
  */
-export function createJevJudge({ apiKey, model, rng = Math.random, fetch }: JudgeConfig & { apiKey: string }): Judge {
+export const DEFAULT_JEV_TIMEOUT_MS = 15_000;
+
+export function createJevJudge({
+  apiKey,
+  model,
+  rng = Math.random,
+  fetch,
+  timeoutMs = DEFAULT_JEV_TIMEOUT_MS,
+  maxRetries = 1,
+}: JudgeConfig & { apiKey: string }): Judge {
   const client = new TypeSafeClient({
     apiKey,
+    // SDK 既定 (10 秒 × 再試行 2 回 + backoff) だと、届かないときに 1 試合が 30 秒以上止まる。
+    // 再試行は Durable Object 側でも行い、画面に「待ち」を出すので SDK 内は控えめにする。
+    timeout: timeoutMs,
+    retry: { maxRetries },
     ...(model ? { defaultModel: model } : {}),
     ...(fetch ? { fetch } : {}),
     // Workers 上では zstd (node:zlib) を前提にしない
