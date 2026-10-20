@@ -5,6 +5,7 @@ import { z } from "zod";
 import { secretToken, sha256, shortId } from "../../../../src/lib/ids";
 import { LIMITS } from "../../../../src/lib/types";
 import { publishRoomEvent, live } from "../../../../src/live";
+import { rejectIfInappropriate } from "../../../../src/server/moderation";
 
 export const POST = defineHandler.withValidator({
   body: z.object({ nickname: z.string().trim().min(1).max(LIMITS.nickname) }),
@@ -12,6 +13,9 @@ export const POST = defineHandler.withValidator({
   const roomId = c.req.param("id")!;
   const [room] = await db.select().from(rooms).where(eq(rooms.id, roomId));
   if (!room) return c.json({ error: "お題が見つかりません" }, 404);
+
+  const rejected = await rejectIfInappropriate(c, { nickname: body.nickname });
+  if (rejected) return rejected;
 
   const participantId = shortId(12);
   const token = secretToken();
