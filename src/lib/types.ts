@@ -4,7 +4,6 @@ export const LIMITS = {
   topic: 80,
   nickname: 20,
   answer: 60,
-  answersPerParticipant: 3,
   answersPerRoom: 64,
 } as const;
 
@@ -31,6 +30,8 @@ export type RoomView = {
     topic: string;
     status: RoomStatus;
     hostParticipantId: string;
+    /** 1 人あたりの回答数の上限。null は制限なし */
+    maxAnswersPerParticipant: number | null;
     championAnswerId: number | null;
   };
   participants: PublicParticipant[];

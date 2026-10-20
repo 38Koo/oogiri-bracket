@@ -2,6 +2,7 @@ import { answers, rooms } from "@schema";
 import { defineHandler } from "void";
 import { asc, count, db, eq } from "void/db";
 import { z } from "zod";
+import { answerBlocker } from "../../../../src/lib/rules";
 import { LIMITS } from "../../../../src/lib/types";
 import { live, publishRoomEvent } from "../../../../src/live";
 import { credentials } from "../../../../src/server/http";
@@ -35,12 +36,12 @@ export const POST = defineHandler.withValidator({
     db.select({ n: count() }).from(answers).where(eq(answers.participantId, me.id)),
     db.select({ n: count() }).from(answers).where(eq(answers.roomId, roomId)),
   ]);
-  if (mine!.n >= LIMITS.answersPerParticipant) {
-    return c.json({ error: `回答は 1 人 ${LIMITS.answersPerParticipant} つまでです` }, 400);
-  }
-  if (all!.n >= LIMITS.answersPerRoom) {
-    return c.json({ error: `このお題の回答は ${LIMITS.answersPerRoom} 件で締め切りです` }, 400);
-  }
+  const blocker = answerBlocker({
+    limitPerParticipant: room.maxAnswersPerParticipant,
+    mine: mine!.n,
+    inRoom: all!.n,
+  });
+  if (blocker) return c.json({ error: blocker }, 400);
 
   const [created] = await db.insert(answers).values({ roomId, participantId: me.id, text: body.text }).returning();
   await publishRoomEvent(live, roomId, {

@@ -2,6 +2,7 @@ import { answers, matches, participants, rooms, type Match } from "@schema";
 import { and, asc, count, eq, isNull, sql, type db as defaultDb } from "void/db";
 import { buildBracket, isBye, nextPlayable, nextSlot, roundCount } from "../lib/bracket";
 import { sha256 } from "../lib/ids";
+import { startBlocker } from "../lib/rules";
 import type { Judge } from "../lib/judge";
 import type { PublicMatch, RoomView } from "../lib/types";
 
@@ -59,6 +60,7 @@ export async function loadRoomView(db: Db, roomId: string): Promise<RoomView | n
       topic: room.topic,
       status: room.status,
       hostParticipantId: room.hostParticipantId,
+      maxAnswersPerParticipant: room.maxAnswersPerParticipant,
       championAnswerId: room.championAnswerId,
     },
     participants: people.map((p) => ({ ...p, answerCount: Number(p.answerCount) })),
@@ -93,10 +95,15 @@ export async function startTournament(db: Db, roomId: string, hostId: string, rn
   if (room.hostParticipantId !== hostId) throw new RoomError(403, "開始できるのはお題の作成者だけです");
   if (room.status !== "collecting") throw new RoomError(409, "すでに開始されています");
 
-  const answerIds = (await db.select({ id: answers.id }).from(answers).where(eq(answers.roomId, roomId))).map(
-    (a) => a.id,
-  );
-  if (answerIds.length < 2) throw new RoomError(400, "回答が 2 つ以上必要です");
+  const roomAnswers = await db
+    .select({ id: answers.id, participantId: answers.participantId })
+    .from(answers)
+    .where(eq(answers.roomId, roomId));
+  const perParticipant = new Map<string, number>();
+  for (const a of roomAnswers) perParticipant.set(a.participantId, (perParticipant.get(a.participantId) ?? 0) + 1);
+  const blocker = startBlocker([...perParticipant.values()]);
+  if (blocker) throw new RoomError(400, blocker);
+  const answerIds = roomAnswers.map((a) => a.id);
 
   // 二重開始を防ぐため、status の条件付き更新で排他する
   const claimed = await db
