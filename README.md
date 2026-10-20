@@ -5,14 +5,15 @@
 
 - フレームワーク: [Void](https://void.cloud)。Pages mode に React と D1 を組み合わせ、Cloudflare Workers で動かす
 - 判定: [`@typesafe-ai/sdk`](https://www.npmjs.com/package/@typesafe-ai/sdk) (Jev / System One の `choice`)
-- 集計: [DuckDB-wasm](https://duckdb.org/docs/api/wasm/overview)。ブラウザ内で SQL を実行し、「みんなの集計」ページに表示する
+- 集計: [DuckDB-wasm](https://duckdb.org/docs/api/wasm/overview)。「みんなの集計」ページの数字をブラウザ内の SQL で出す (画面上では仕組みを打ち出さない)
 
 ## 遊び方
 
 1. トップでお題とニックネームを入れて「お題を出す」
 2. 表示された URL を共有する。参加者はニックネームだけで入り、回答を出す (1 人あたりの上限は出題者が「制限なし」か 1〜10 から決める)
 3. 回答した人が 2 人以上そろったら、出題者が「トーナメントを始める」を押す
-4. 1 試合ずつ幕が開いて Jev が判定する。勝率がバーで示され、勝者がトーナメント表を勝ち上がる
+4. 1 試合ずつ Jev が判定する。勝率がバーで示され、勝者の線が青く伸びてトーナメント表を勝ち上がる
+5. 決着後、参加者は自分の回答を「みんなの集計」に載せるかを選ぶ (既定は載せない。あとから外せる)
 
 ## 開発
 
@@ -29,6 +30,7 @@ pnpm typecheck
 | ------------------ | ---- | --------------------------------------------------------------------------- |
 | `TYPESAFE_API_KEY` | 任意 | Jev の API キー。未設定だと**仮判定 (ランダム)** で進行する。演出の確認用 |
 | `JEV_MODEL`        | 任意 | 例: `jev-1.13.0`。未設定なら SDK の既定モデルを使う                          |
+| `JEV_TIMEOUT_MS`   | 任意 | Jev 1 回の呼び出しを待つ上限。既定 15000                                      |
 
 `void/env` が読むのはルートの `.env` だけです (`.env.example` を置くと dev server が起動しません)。
 本番では `void secret put TYPESAFE_API_KEY` で設定します。
@@ -38,11 +40,13 @@ pnpm typecheck
 ```
 db/schema.ts                 rooms / participants / answers / matches (D1)
 src/lib/bracket.ts           トーナメント表の生成・進行 (純粋関数 + テスト)
+src/lib/treeLayout.ts        下から上へ勝ち上がる表の座標計算 (純粋関数 + テスト)
+src/lib/rules.ts             回答数の上限・開始条件
 src/lib/judge.ts             Jev 判定 (左右をランダムに入れ替えて位置バイアスを打ち消す) / 仮判定
 src/server/rooms.ts          ルームの読み出し、開始、1 試合の判定と勝者の繰り上げ
 durable-objects/tournament.ts  ルームごとの進行役。alarm で 1 試合ずつ判定して配信
 src/live.ts, routes/live.ts  void/live (SSE) の room:<id> トピック
-routes/api/...               お題作成・参加・回答・開始・集計用データ
+routes/api/...               お題作成・参加・回答・開始・集計への掲載 (share)・集計用データ
 pages/                       トップ / ルーム (/r/:id) / みんなの集計 (/stats)
 src/client/useRoom.ts        ライブイベントを演出の順にキューで再生するフック
 src/client/duckdb.ts         DuckDB-wasm の起動 (wasm は jsDelivr から読む)
@@ -58,12 +62,13 @@ src/client/duckdb.ts         DuckDB-wasm の起動 (wasm は jsDelivr から読�
                → match_decided 配信 → 5.5 秒後に次の alarm (決勝なら tournament_finished)
 ```
 
-- サーバーは判定開始と結果をほぼ同時に送るので、クライアント側でキューに積み、「幕が開く → バーが伸びる → 表に書き込む」の間を取って再生する
+- サーバーは判定開始と結果をほぼ同時に送るので、クライアント側でキューに積み、「対戦を出す → バーが伸びる → 表に書き込む」の間を取って再生する
 - `void/live` は at-most-once 配信のため、購読直後とタブ復帰時に `GET /api/rooms/:id` で状態を取り直す
-- Jev が 3 回続けて失敗した場合は、進行を止めないよう仮判定に切り替える
+- Jev が 2 回続けて失敗した場合は、進行を止めないよう仮判定に切り替え、そのトーナメントの残りも仮判定で進める
 
 ### 設計上の決めごと (変更しにくい部分)
 
 - **匿名参加**: アカウントは作らず、ルームごとに参加者 ID と秘密トークンを発行する。トークンは localStorage に保存し、DB にはハッシュだけを持つ
 - **1 試合ずつのライブ判定**: Durable Object が直列に判定するので、同じ試合を二重に判定しない
 - **DB は D1 (行指向)**: DuckDB は閲覧側の分析専用で、`/api/stats/matches` の結果をブラウザで集計する
+- **集計はオプトイン**: 参加者ごとの `share_stats` (既定 false) が true の回答だけを集計に出す。お題の文言は出題者が載せたときだけ出す
