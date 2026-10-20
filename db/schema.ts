@@ -35,6 +35,11 @@ export const participants = sqliteTable(
       .references(() => rooms.id),
     nickname: text("nickname").notNull(),
     tokenHash: text("token_hash").notNull(),
+    /**
+     * みんなの集計に自分の回答・ニックネームを載せるか。決着後に本人が選ぶ (オプトイン)。
+     * 既定は載せない。後から外すこともできる。
+     */
+    shareStats: integer("share_stats", { mode: "boolean" }).notNull().default(false),
     createdAt: createdAt(),
   },
   (t) => [index("participants_room_idx").on(t.roomId)],

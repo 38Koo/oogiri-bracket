@@ -1,0 +1,1 @@
+ALTER TABLE `participants` ADD `share_stats` integer DEFAULT false NOT NULL;
