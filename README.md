@@ -5,7 +5,6 @@
 
 - フレームワーク: [Void](https://void.cloud)。Pages mode に React と D1 を組み合わせ、Cloudflare Workers で動かす
 - 判定: [`@typesafe-ai/sdk`](https://www.npmjs.com/package/@typesafe-ai/sdk) (Jev / System One の `choice`)
-- 集計: [DuckDB-wasm](https://duckdb.org/docs/api/wasm/overview)。「みんなの集計」ページの数字をブラウザ内の SQL で出す (画面上では仕組みを打ち出さない)
 
 ## 遊び方
 
@@ -13,7 +12,7 @@
 2. 表示された URL を共有する。参加者はニックネームだけで入り、回答を出す (1 人あたりの上限は出題者が「制限なし」か 1〜10 から決める)
 3. 回答した人が 2 人以上そろったら、出題者が「トーナメントを始める」を押す
 4. 1 試合ずつ Jev が判定する。勝率がバーで示され、勝者の線が青く伸びてトーナメント表を勝ち上がる
-5. 決着後、参加者は自分の回答を「みんなの集計」に載せるかを選ぶ (既定は載せない。あとから外せる)
+5. 決着したら「新しいお題を出す」から次のお題へ
 
 ## 開発
 
@@ -49,10 +48,9 @@ src/lib/judge.ts             Jev 判定 (左右をランダムに入れ替えて
 src/server/rooms.ts          ルームの読み出し、開始、1 試合の判定と勝者の繰り上げ
 durable-objects/tournament.ts  ルームごとの進行役。alarm で 1 試合ずつ判定して配信
 src/live.ts, routes/live.ts  void/live (SSE) の room:<id> トピック
-routes/api/...               お題作成・参加・回答・開始・集計への掲載 (share)・集計用データ
-pages/                       トップ / ルーム (/r/:id) / みんなの集計 (/stats)
+routes/api/...               お題作成・参加・回答・開始
+pages/                       トップ / ルーム (/r/:id)
 src/client/useRoom.ts        ライブイベントを演出の順にキューで再生するフック
-src/client/duckdb.ts         DuckDB-wasm の起動 (wasm は jsDelivr から読む)
 ```
 
 ### 進行の流れ
@@ -73,6 +71,5 @@ src/client/duckdb.ts         DuckDB-wasm の起動 (wasm は jsDelivr から読�
 
 - **匿名参加**: アカウントは作らず、ルームごとに参加者 ID と秘密トークンを発行する。トークンは localStorage に保存し、DB にはハッシュだけを持つ
 - **1 試合ずつのライブ判定**: Durable Object が直列に判定するので、同じ試合を二重に判定しない
-- **DB は D1 (行指向)**: DuckDB は閲覧側の分析専用で、`/api/stats/matches` の結果をブラウザで集計する
+- **DB は D1 (行指向)**: 分析用の集計は持たない (DuckDB-wasm による集計ページは試作後に削除した)
 - **不適切な表現の確認**: お題とニックネームは作成・参加時に Jev の noul で確認し、しきい値以上なら 400 で弾く。Jev に届かないときは遊びを止めないよう通してログに残す
-- **集計はオプトイン**: 参加者ごとの `share_stats` (既定 false) が true の回答だけを集計に出す。お題の文言は出題者が載せたときだけ出す
