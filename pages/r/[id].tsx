@@ -51,7 +51,7 @@ function Room({ initial }: { initial: RoomView }) {
       ) : (
         <>
           {showResult ? (
-            <ResultPanel roomId={room.id} champion={answerOf(room.championAnswerId)} credentials={credentials} />
+            <ResultPanel champion={answerOf(room.championAnswerId)} />
           ) : (
             <Stage spotlight={spotlight} matches={view.matches} answerOf={answerOf} totalRounds={totalRounds} />
           )}

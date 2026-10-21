@@ -1,16 +1,8 @@
 import { Link } from "@void/react";
-import type { Credentials } from "../credentials";
 import type { PublicAnswer } from "../../lib/types";
-import { ShareChoice } from "./ShareChoice";
 
-type Props = {
-  roomId: string;
-  champion: PublicAnswer | undefined;
-  credentials: Credentials | null;
-};
-
-/** 決着後: 優勝した回答、次の行動、集計への掲載の選択 */
-export function ResultPanel({ roomId, champion, credentials }: Props) {
+/** 決着後: 優勝した回答と、次の行動 */
+export function ResultPanel({ champion }: { champion: PublicAnswer | undefined }) {
   return (
     <section className="result-panel" aria-live="polite">
       {champion && (
@@ -24,11 +16,7 @@ export function ResultPanel({ roomId, champion, credentials }: Props) {
         <Link href="/" className="btn">
           新しいお題を出す
         </Link>
-        <Link href="/stats" className="btn btn-secondary">
-          みんなの集計を見る
-        </Link>
       </div>
-      {credentials && <ShareChoice roomId={roomId} credentials={credentials} />}
     </section>
   );
 }
