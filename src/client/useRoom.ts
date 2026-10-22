@@ -18,6 +18,8 @@ export const TIMING = {
 const STALE_AFTER_MS = 3_000;
 /** 取りこぼし対策で、ルームの状態を定期的に取り直す間隔 */
 const RESYNC_INTERVAL_MS = 8_000;
+/** タブが裏に回ってから配信を切るまでの猶予 */
+const HIDDEN_DISCONNECT_MS = 30_000;
 
 type Queued = { event: RoomEvent; receivedAt: number };
 
@@ -51,8 +53,6 @@ export function useRoom(initial: RoomView) {
   const draining = useRef(false);
   /** 演出中に取り直した状態。演出が終わってから重ねる (勝敗のネタバレを防ぐ) */
   const pendingFresh = useRef<RoomView | null>(null);
-  const finished = useRef(initial.room.status === "finished");
-  finished.current = view.room.status === "finished";
   const roomId = initial.room.id;
 
   const resync = useCallback(async () => {
@@ -142,7 +142,43 @@ export function useRoom(initial: RoomView) {
     }
   }, [apply]);
 
+  // 配信の接続 1 本ごとに Durable Object が開きっぱなしになり、稼働時間 (無料枠は 1 日 13,000 GB-s) を食う。
+  // 演出が要る「募集中・対戦中」で、画面を見ているときだけつなぐ。それ以外は取り直しで追いつく。
+  const [away, setAway] = useState(false);
   useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onVisibility = () => {
+      clearTimeout(timer);
+      if (document.visibilityState === "visible") {
+        setAway(false);
+        void resync();
+      } else {
+        // アプリの切り替え程度で切らないよう、少し待ってから切る
+        timer = setTimeout(() => setAway(true), HIDDEN_DISCONNECT_MS);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      clearTimeout(timer);
+    };
+  }, [resync]);
+
+  // 決着後・期限切れは演出するイベントがない (次の試合の開始は取り直しで拾う)
+  const settled = view.room.status === "finished" || view.room.expired;
+  const connected = !away && !settled;
+
+  // 取りこぼし対策と、接続していない間の追いつき用に、見ている間は定期的に取り直す
+  useEffect(() => {
+    if (view.room.expired) return;
+    const timer = setInterval(() => {
+      if (document.visibilityState === "visible") void resync();
+    }, RESYNC_INTERVAL_MS);
+    return () => clearInterval(timer);
+  }, [view.room.expired, resync]);
+
+  useEffect(() => {
+    if (!connected) return;
     let errorResync: ReturnType<typeof setTimeout> | undefined;
     const stream = connectLiveStream("/live", {
       retryDelay: 1_500,
@@ -169,21 +205,13 @@ export function useRoom(initial: RoomView) {
       })
       .catch(() => void resync());
 
-    // 配信は at-most-once なので、タブに戻ってきたとき・定期的にも取り直す
-    const onVisible = () => document.visibilityState === "visible" && void resync();
-    document.addEventListener("visibilitychange", onVisible);
-    const timer = setInterval(() => {
-      if (document.visibilityState === "visible" && !finished.current) void resync();
-    }, RESYNC_INTERVAL_MS);
     return () => {
-      document.removeEventListener("visibilitychange", onVisible);
-      clearInterval(timer);
       clearTimeout(errorResync);
       // close() の後に解除が終わると "stream is closed" で reject されるので握りつぶす
       unsubscribe?.().catch(() => {});
       stream.close();
     };
-  }, [roomId, drain, resync]);
+  }, [connected, roomId, drain, resync]);
 
   return { view, setView, spotlight, resync };
 }
