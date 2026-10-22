@@ -110,6 +110,11 @@ export function useRoom(initial: RoomView) {
         setView((v) => ({ ...v, matches: upsertMatches(v.matches, [event.match, event.next]) }));
         if (!fast) await sleep(TIMING.settle);
         return;
+      case "game_started":
+        // 次の試合へ。前の試合の演出は残さない
+        setSpotlight(null);
+        setView((v) => mergeView(v, event.view));
+        return;
       case "tournament_finished":
         setSpotlight(null);
         setView((v) => ({

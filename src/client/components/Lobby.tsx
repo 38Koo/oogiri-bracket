@@ -80,7 +80,17 @@ function ShareLink({ roomId }: { roomId: string }) {
   );
 }
 
-function JoinForm({ roomId, onJoined }: { roomId: string; onJoined: (c: Credentials) => void }) {
+export function JoinForm({
+  roomId,
+  onJoined,
+  title = "参加する",
+  hint,
+}: {
+  roomId: string;
+  onJoined: (c: Credentials) => void;
+  title?: string;
+  hint?: string;
+}) {
   const [nickname, setNickname] = useState("");
   const [pending, setPending] = useState(false);
   const hydrated = useHydrated();
@@ -102,7 +112,8 @@ function JoinForm({ roomId, onJoined }: { roomId: string; onJoined: (c: Credenti
 
   return (
     <form onSubmit={onSubmit}>
-      <h2>参加する</h2>
+      <h2>{title}</h2>
+      {hint && <p className="hint">{hint}</p>}
       <label htmlFor="nickname">ニックネーム</label>
       <div className="row">
         <input

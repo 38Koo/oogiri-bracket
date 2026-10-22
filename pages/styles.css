@@ -596,3 +596,91 @@ select:focus {
 .share-link {
   margin-bottom: 2.25rem;
 }
+
+/* ---------- 次の試合・途中参加・これまでの試合 ---------- */
+.next-game {
+  display: grid;
+  gap: 1.25rem;
+  max-width: 34rem;
+  margin: 0 auto 2.5rem;
+  padding: 1.75rem;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+}
+
+.next-game h2 {
+  font-size: var(--step-1);
+}
+
+.next-game fieldset {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.next-game legend {
+  font-weight: 700;
+  margin-bottom: 0.35rem;
+}
+
+.member-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.25rem;
+}
+
+.member-list label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-weight: 500;
+  margin: 0;
+}
+
+.member-list .host,
+.people .host {
+  color: var(--muted);
+  font-size: var(--step--1);
+  margin-left: 0.25rem;
+}
+
+.late-join {
+  max-width: 34rem;
+  margin: 0 0 2.5rem;
+}
+
+.late-join h2 {
+  font-size: var(--step-1);
+}
+
+.history {
+  margin-top: 3rem;
+}
+
+.history h2 {
+  font-size: var(--step-1);
+  margin-bottom: 0.5rem;
+}
+
+.history ol {
+  padding-left: 1.5rem;
+  margin: 0;
+}
+
+.history li {
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.history-topic {
+  font-weight: 700;
+  margin-right: 0.75rem;
+}
+
+.history-champion {
+  color: var(--muted);
+  font-size: var(--step--1);
+}
