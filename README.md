@@ -22,6 +22,7 @@ pnpm dev          # http://localhost:5173
 pnpm test         # ロジックのユニットテスト (Void ランタイムを使わない)
 pnpm typecheck
 pnpm moderation:check   # 不適切判定を本物の Jev で試す (しきい値の調整用)
+pnpm diagnose:live <URL>  # デプロイ先でライブ配信が届いているか確かめる
 ```
 
 ### 環境変数 (`.env`)
