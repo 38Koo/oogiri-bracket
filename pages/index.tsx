@@ -2,6 +2,7 @@ import { useRouter } from "@void/react";
 import { useState } from "react";
 import { fetch } from "void/client";
 import { errorMessage, saveCredentials } from "../src/client/credentials";
+import { useHydrated } from "../src/client/useHydrated";
 import { ANSWER_LIMIT_CHOICES } from "../src/lib/rules";
 import { LIMITS } from "../src/lib/types";
 
@@ -11,6 +12,7 @@ export default function HomePage() {
   const [nickname, setNickname] = useState("");
   const [limit, setLimit] = useState<number | null>(null);
   const [pending, setPending] = useState(false);
+  const hydrated = useHydrated();
   const [error, setError] = useState<string | null>(null);
 
   async function onSubmit(event: React.FormEvent) {
@@ -74,7 +76,7 @@ export default function HomePage() {
         </div>
         {error && <p className="error">{error}</p>}
         <div>
-          <button className="btn" disabled={pending}>
+          <button className="btn" disabled={pending || !hydrated}>
             お題を出す
           </button>
         </div>

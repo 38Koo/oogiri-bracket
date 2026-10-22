@@ -3,6 +3,7 @@ import { fetch } from "void/client";
 import type { Credentials } from "../credentials";
 import { authHeaders, errorMessage, saveCredentials } from "../credentials";
 import { LIMITS, type RoomView } from "../../lib/types";
+import { useHydrated } from "../useHydrated";
 import { AnswerDots } from "./AnswerDots";
 import { startBlocker } from "../../lib/rules";
 
@@ -82,6 +83,7 @@ function ShareLink({ roomId }: { roomId: string }) {
 function JoinForm({ roomId, onJoined }: { roomId: string; onJoined: (c: Credentials) => void }) {
   const [nickname, setNickname] = useState("");
   const [pending, setPending] = useState(false);
+  const hydrated = useHydrated();
   const [error, setError] = useState<string | null>(null);
 
   async function onSubmit(event: React.FormEvent) {
@@ -111,7 +113,7 @@ function JoinForm({ roomId, onJoined }: { roomId: string; onJoined: (c: Credenti
           value={nickname}
           onChange={(e) => setNickname(e.target.value)}
         />
-        <button className="btn" disabled={pending}>
+        <button className="btn" disabled={pending || !hydrated}>
           参加する
         </button>
       </div>
