@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vite-plus/test";
-import { answerBlocker, startBlocker } from "./rules";
+import { answerBlocker, isRoomExpired, startBlocker } from "./rules";
 import { LIMITS } from "./types";
 
 describe("startBlocker", () => {
@@ -25,5 +25,16 @@ describe("answerBlocker", () => {
     expect(
       answerBlocker({ limitPerParticipant: null, mine: 0, inRoom: LIMITS.answersPerRoom }),
     ).toMatch("締め切り");
+  });
+});
+
+describe("isRoomExpired", () => {
+  const at = Date.parse("2026-10-23T10:00:00Z");
+  test("最後の操作から 1 時間たつと無効", () => {
+    expect(isRoomExpired("2026-10-23 09:00:01", at)).toBe(false);
+    expect(isRoomExpired("2026-10-23 09:00:00", at)).toBe(true);
+  });
+  test("D1 の時刻は UTC として読む", () => {
+    expect(isRoomExpired("2026-10-23 09:30:00", at)).toBe(false);
   });
 });

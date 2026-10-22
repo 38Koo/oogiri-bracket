@@ -22,18 +22,29 @@ export type PublicMatch = {
   winnerAnswerId: number | null;
   probA: number | null;
   judge: "jev" | "mock" | "bye" | null;
+  nextSlot: number | null;
+  nextSide: "A" | "B" | null;
 };
 
+/** これまでの試合 (いまの試合より前) */
+export type PastGame = { number: number; topic: string; champion: { text: string; nickname: string } | null };
+
 export type RoomView = {
+  /** ルームと、その中の「いまの試合」 */
   room: {
     id: string;
+    hostParticipantId: string;
+    /** いまの試合の番号 (1 から) */
+    gameNumber: number;
     topic: string;
     status: RoomStatus;
-    hostParticipantId: string;
     /** 1 人あたりの回答数の上限。null は制限なし */
     maxAnswersPerParticipant: number | null;
     championAnswerId: number | null;
+    /** 最後の操作から一定時間たってリンクが無効になっている */
+    expired: boolean;
   };
+  history: PastGame[];
   participants: PublicParticipant[];
   /** 回答募集中は空 (誰が何を書いたかはトーナメント開始まで伏せる) */
   answers: PublicAnswer[];
@@ -49,6 +60,8 @@ export type RoomEvent =
   /** Jev の判定が失敗し、少し待って再試行する (fallback=true なら次は仮判定) */
   | { type: "match_delayed"; matchId: number; attempt: number; fallback: boolean }
   | { type: "match_decided"; match: PublicMatch; next: PublicMatch | null }
-  | { type: "tournament_finished"; championAnswerId: number };
+  | { type: "tournament_finished"; championAnswerId: number }
+  /** 出題者が次の試合を始めた (お題・回答数・メンバーが変わっている) */
+  | { type: "game_started"; view: RoomView };
 
 export const roomTopic = (roomId: string) => `room:${roomId}`;

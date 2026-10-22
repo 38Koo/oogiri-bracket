@@ -8,18 +8,23 @@ const match = (p: Partial<PublicMatch> & Pick<PublicMatch, "id" | "round" | "slo
   winnerAnswerId: null,
   probA: null,
   judge: null,
+  nextSlot: null,
+  nextSide: null,
   ...p,
 });
 
-const view = (p: Partial<RoomView> & { status?: RoomView["room"]["status"] } = {}): RoomView => ({
+const view = (p: Partial<RoomView> & { status?: RoomView["room"]["status"]; gameNumber?: number } = {}): RoomView => ({
   room: {
     id: "r1",
+    hostParticipantId: "h",
+    gameNumber: p.gameNumber ?? 1,
     topic: "t",
     status: p.status ?? "running",
-    hostParticipantId: "h",
     maxAnswersPerParticipant: null,
     championAnswerId: null,
+    expired: false,
   },
+  history: [],
   participants: p.participants ?? [],
   answers: p.answers ?? [],
   matches: p.matches ?? [],
@@ -76,5 +81,18 @@ describe("mergeView", () => {
       { id: "b", nickname: "B", answerCount: 1 },
     ]);
     expect(merged.answers).toHaveLength(1);
+  });
+
+  test("次の試合が始まったら丸ごと置き換え、前の試合の遅れた応答は捨てる", () => {
+    const finished = view({ status: "finished", participants: [{ id: "x", nickname: "外された人", answerCount: 2 }] });
+    const next = view({ status: "collecting", gameNumber: 2, participants: [] });
+    expect(mergeView(finished, next)).toBe(next);
+    expect(mergeView(next, finished)).toBe(next);
+  });
+
+  test("期限切れは戻らない", () => {
+    const expired = view();
+    expired.room.expired = true;
+    expect(mergeView(expired, view()).room.expired).toBe(true);
   });
 });

@@ -15,11 +15,18 @@ function progress(m: PublicMatch) {
  */
 export function mergeView(current: RoomView, fresh: RoomView): RoomView {
   if (current.room.id !== fresh.room.id) return fresh;
+  // 試合が変わった: 新しい試合なら丸ごと置き換え (メンバーの出入りも反映)、古い試合の応答は捨てる
+  if (fresh.room.gameNumber > current.room.gameNumber) return fresh;
+  if (fresh.room.gameNumber < current.room.gameNumber) return current;
 
   const freshAhead = STATUS_ORDER[fresh.room.status] >= STATUS_ORDER[current.room.status];
-  const room = freshAhead
-    ? { ...fresh.room, championAnswerId: fresh.room.championAnswerId ?? current.room.championAnswerId }
-    : current.room;
+  const room = {
+    ...(freshAhead
+      ? { ...fresh.room, championAnswerId: fresh.room.championAnswerId ?? current.room.championAnswerId }
+      : current.room),
+    // 期限切れも戻らない
+    expired: fresh.room.expired || current.room.expired,
+  };
 
   const participants = new Map(current.participants.map((p) => [p.id, p]));
   for (const p of fresh.participants) {
@@ -38,6 +45,7 @@ export function mergeView(current: RoomView, fresh: RoomView): RoomView {
 
   return {
     room,
+    history: fresh.history.length >= current.history.length ? fresh.history : current.history,
     participants: [...participants.values()],
     answers: [...answers.values()].sort((a, b) => a.id - b.id),
     matches: [...matches.values()].sort((a, b) => a.round - b.round || a.slot - b.slot),

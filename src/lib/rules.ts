@@ -1,5 +1,17 @@
 import { LIMITS } from "./types";
 
+/** 最後の操作からこれだけたつと、ルームのリンクは無効になる */
+export const ROOM_IDLE_LIMIT_MS = 60 * 60 * 1000;
+
+/** D1 の datetime('now') 形式 (UTC, "YYYY-MM-DD HH:MM:SS") を時刻に直す */
+export function parseDbTime(value: string): number {
+  return Date.parse(value.includes("T") ? value : `${value.replace(" ", "T")}Z`);
+}
+
+export function isRoomExpired(lastActivityAt: string, now: number = Date.now()): boolean {
+  return now - parseDbTime(lastActivityAt) >= ROOM_IDLE_LIMIT_MS;
+}
+
 /** 開始に必要な「回答した参加者」の人数 */
 export const MIN_ANSWERED_PARTICIPANTS = 2;
 
