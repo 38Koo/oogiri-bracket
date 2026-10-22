@@ -4,13 +4,13 @@ allowBuilds:
   sharp: true
   workerd: true
 minimumReleaseAgeExclude:
-  - "@void/deploy-cloudflare@1.1.12"
-  - "@void/deploy-core@1.1.12"
-  - "@void/edge@1.1.12"
-  - "@void/isr@1.1.12"
-  - "@void/platform@1.1.12"
-  - "@void/react@1.1.12"
-  - void@1.1.12
+  - "@void/deploy-cloudflare@1.1.12 || 1.2.1"
+  - "@void/deploy-core@1.1.12 || 1.2.1"
+  - "@void/edge@1.1.12 || 1.2.1"
+  - "@void/isr@1.1.12 || 1.2.1"
+  - "@void/platform@1.1.12 || 1.2.1"
+  - "@void/react@1.1.12 || 1.2.1"
+  - void@1.1.12 || 1.2.1
 overrides:
   vite@*: npm:@voidzero-dev/vite-plus-core@^1.2.0
 peerDependencyRules:
