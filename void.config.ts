@@ -5,6 +5,13 @@ export default defineConfig({
   "worker": {
     "compatibility_date": "2026-02-24"
   },
+  // 公開のしかたを明示する。未指定だと Void は Cloudflare 上の現在の設定を引き継ごうとするが、
+  // secret put で作られた版からは引き継げず、デプロイが止まる。
+  "cloudflare": {
+    "workers_dev": true,
+    "preview_urls": true,
+    "routes": []
+  },
   "head": {
     "titleTemplate": "%s | 勝手に大喜利トーナメント",
     "htmlAttrs": { "lang": "ja" },
