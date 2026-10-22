@@ -51,7 +51,7 @@ export function Stage({ spotlight, matches, answerOf, totalRounds }: Props) {
         role="img"
         aria-label={decided ? `左 ${pctA}%、右 ${100 - pctA}%` : "判定中"}
       >
-        <span style={decided ? { width: `${pctA}%` } : undefined} />
+        <span style={decided ? { width: `${pctA}%` } : match ? undefined : { width: 0 }} />
       </div>
       <p className="result">
         {match && !decided && "Jev が判定しています"}
