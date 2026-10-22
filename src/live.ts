@@ -17,6 +17,14 @@ export const live = defineLiveStream({
 
 export type LiveTarget = Pick<typeof live, "publish">;
 
-export function publishRoomEvent(target: LiveTarget, roomId: string, event: RoomEvent) {
-  return target.publish(`room:${roomId}`, event, { type: event.type });
+/**
+ * 配信は「おまけ」: 失敗しても (Durable Objects の無料枠切れなど) 呼び出し元の処理は失敗させない。
+ * クライアントは定期的に状態を取り直すので、配信が落ちても数秒遅れで追いつく。
+ */
+export async function publishRoomEvent(target: LiveTarget, roomId: string, event: RoomEvent) {
+  try {
+    await target.publish(`room:${roomId}`, event, { type: event.type });
+  } catch (error) {
+    console.warn(`[live] publish failed room=${roomId} type=${event.type}: ${error instanceof Error ? error.message : String(error)}`);
+  }
 }
