@@ -20,10 +20,21 @@ export function mergeView(current: RoomView, fresh: RoomView): RoomView {
   if (fresh.room.gameNumber < current.room.gameNumber) return current;
 
   const freshAhead = STATUS_ORDER[fresh.room.status] >= STATUS_ORDER[current.room.status];
+  const base = freshAhead
+    ? { ...fresh.room, championAnswerId: fresh.room.championAnswerId ?? current.room.championAnswerId }
+    : current.room;
+  // 判定中 → 再生中 の順にしか進まないので、再生の起点が分かったら判定の進み具合は捨てる
+  const playbackStartsAt = fresh.room.playbackStartsAt ?? current.room.playbackStartsAt;
+  const judging =
+    playbackStartsAt !== null
+      ? null
+      : fresh.room.judging && current.room.judging && current.room.judging.done > fresh.room.judging.done
+        ? current.room.judging
+        : base.judging;
   const room = {
-    ...(freshAhead
-      ? { ...fresh.room, championAnswerId: fresh.room.championAnswerId ?? current.room.championAnswerId }
-      : current.room),
+    ...base,
+    judging,
+    playbackStartsAt,
     // 期限切れも戻らない
     expired: fresh.room.expired || current.room.expired,
   };
@@ -45,6 +56,7 @@ export function mergeView(current: RoomView, fresh: RoomView): RoomView {
 
   return {
     room,
+    serverNow: Math.max(fresh.serverNow, current.serverNow),
     history: fresh.history.length >= current.history.length ? fresh.history : current.history,
     participants: [...participants.values()],
     answers: [...answers.values()].sort((a, b) => a.id - b.id),

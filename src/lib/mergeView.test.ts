@@ -23,7 +23,10 @@ const view = (p: Partial<RoomView> & { status?: RoomView["room"]["status"]; game
     maxAnswersPerParticipant: null,
     championAnswerId: null,
     expired: false,
+    judging: null,
+    playbackStartsAt: null,
   },
+  serverNow: 0,
   history: [],
   participants: p.participants ?? [],
   answers: p.answers ?? [],
@@ -88,6 +91,22 @@ describe("mergeView", () => {
     const next = view({ status: "collecting", gameNumber: 2, participants: [] });
     expect(mergeView(finished, next)).toBe(next);
     expect(mergeView(next, finished)).toBe(next);
+  });
+
+  test("再生が始まったら、遅れて届いた「判定中」の状態に戻らない", () => {
+    const playing = view();
+    playing.room.playbackStartsAt = 1000;
+    const stale = view();
+    stale.room.judging = { done: 3, total: 8 };
+    expect(mergeView(playing, stale).room).toMatchObject({ playbackStartsAt: 1000, judging: null });
+  });
+
+  test("判定の進み具合は減らない", () => {
+    const ahead = view();
+    ahead.room.judging = { done: 5, total: 8 };
+    const stale = view();
+    stale.room.judging = { done: 2, total: 8 };
+    expect(mergeView(ahead, stale).room.judging).toEqual({ done: 5, total: 8 });
   });
 
   test("期限切れは戻らない", () => {

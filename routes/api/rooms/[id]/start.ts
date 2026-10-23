@@ -1,11 +1,12 @@
 import { defineHandler } from "void";
 import { db } from "void/db";
-import Tournament from "../../../../durable-objects/tournament";
-import { live, publishRoomEvent } from "../../../../src/live";
 import { credentials, errorResponse } from "../../../../src/server/http";
 import { authenticate, startTournament } from "../../../../src/server/rooms";
 
-/** ホストがトーナメントを開始する。以降の進行は Durable Object の alarm が担う。 */
+/**
+ * 出題者がトーナメントを開始する。組み合わせを決めて「判定中」にするところまで。
+ * 判定は続けて POST /judge を呼んで進める (出題者の画面が自動で呼ぶ)。
+ */
 export const POST = defineHandler(async (c) => {
   const roomId = c.req.param("id")!;
   const { participantId, token } = credentials(c);
@@ -13,10 +14,7 @@ export const POST = defineHandler(async (c) => {
   if (!me) return c.json({ error: "参加者として認証できません" }, 403);
 
   try {
-    const view = await startTournament(db, roomId, me.id);
-    await publishRoomEvent(live, roomId, { type: "tournament_started", view: view! });
-    await Tournament.get(roomId).start(roomId);
-    return view;
+    return await startTournament(db, roomId, me.id);
   } catch (error) {
     return errorResponse(c, error);
   }

@@ -1,15 +1,23 @@
 import { answers, games, matches, participants, rooms, type Game, type Match } from "@schema";
 import { and, asc, count, desc, eq, inArray, isNull, sql, type db as defaultDb } from "void/db";
-import { advance, buildBracket, nextPlayable, resolveInitialByes } from "../lib/bracket";
+import { advance, buildBracket, resolveInitialByes } from "../lib/bracket";
 import { secretToken, sha256, shortId } from "../lib/ids";
-import type { Judge } from "../lib/judge";
-import { isRoomExpired, startBlocker } from "../lib/rules";
+import { createMockJudge, type Judge, type JudgeResult } from "../lib/judge";
+import { isRoomExpired, parseDbTime, startBlocker } from "../lib/rules";
+import { maskMatches, playbackEnd, playbackOrder, slotStartLookup } from "../lib/schedule";
 import type { PastGame, PublicMatch, RoomView } from "../lib/types";
 
 /** ルートでは `void/db` の db、Durable Object では createDb(env.DB) を渡す */
 export type Db = typeof defaultDb;
 
 const NOW = sql`(datetime('now'))`;
+
+/**
+ * 再生中、各端末にはこれだけ先に始まる試合の結果まで渡しておく。
+ * 端末は数秒おきに取り直すので、次の取り直しまでに始まる試合が手元にあれば途切れない。
+ * (開発者ツールで覗いても、数秒先までしか分からない)
+ */
+export const LOOKAHEAD_MS = 6_000;
 
 export class RoomError extends Error {
   constructor(
@@ -84,21 +92,48 @@ export async function loadRoomView(db: Db, roomId: string): Promise<RoomView | n
     loadHistory(db, roomId, game.number),
   ]);
 
+  const now = Date.now();
+  const all = gameMatches.map(toPublicMatch);
+  let status = game.status;
+  let championAnswerId = game.championAnswerId;
+  let shown = all;
+  let judging: RoomView["room"]["judging"] = null;
+  let playbackStartsAt: number | null = null;
+
+  if (game.status === "running") {
+    // Jev が判定している最中: 1 回戦の組み合わせだけ見せ、結果は伏せる
+    const played = all.filter((m) => m.judge !== "bye");
+    judging = { done: played.filter((m) => m.winnerAnswerId !== null).length, total: played.length };
+    shown = maskMatches(all, () => Number.POSITIVE_INFINITY, now);
+  } else if (game.status === "finished" && game.startedAt) {
+    // 判定は終わっている。時刻表で再生が終わるまでは「対戦中」として、先の結果を伏せる
+    playbackStartsAt = parseDbTime(game.startedAt);
+    const order = playbackOrder(all);
+    if (now < playbackEnd(playbackStartsAt, order.length)) {
+      status = "running";
+      championAnswerId = null;
+      shown = maskMatches(all, slotStartLookup(order, playbackStartsAt), now + LOOKAHEAD_MS);
+    }
+  }
+
   return {
     room: {
       id: room.id,
       hostParticipantId: room.hostParticipantId,
       gameNumber: game.number,
       topic: game.topic,
-      status: game.status,
+      status,
       maxAnswersPerParticipant: game.maxAnswersPerParticipant,
-      championAnswerId: game.championAnswerId,
+      championAnswerId,
       expired,
+      judging,
+      playbackStartsAt,
     },
+    serverNow: now,
     history: pastGames,
     participants: people.map((p) => ({ ...p, answerCount: Number(p.answerCount) })),
     answers: gameAnswers,
-    matches: gameMatches.map(toPublicMatch),
+    matches: shown,
   };
 }
 
@@ -145,7 +180,10 @@ export async function createRoom(db: Db, input: { topic: string; nickname: strin
   return { roomId, participantId, token };
 }
 
-/** トーナメント表を作って running に遷移する。1 回戦の不戦勝はここで確定させる。 */
+/**
+ * トーナメント表を作って running (= Jev が判定中) に遷移する。1 回戦の不戦勝はここで確定させる。
+ * 判定そのものは judgeRound を呼んで進める。
+ */
 export async function startTournament(db: Db, roomId: string, hostId: string, rng: () => number = Math.random) {
   const { room, game } = await requireActiveRoom(db, roomId);
   if (room.hostParticipantId !== hostId) throw new RoomError(403, "開始できるのは出題者だけです");
@@ -164,7 +202,7 @@ export async function startTournament(db: Db, roomId: string, hostId: string, rn
   // 二重開始を防ぐため、status の条件付き更新で排他する
   const claimed = await db
     .update(games)
-    .set({ status: "running", startedAt: NOW })
+    .set({ status: "running" })
     .where(and(eq(games.id, game.id), eq(games.status, "collecting")))
     .returning({ id: games.id });
   if (claimed.length === 0) throw new RoomError(409, "すでに開始されています");
@@ -187,79 +225,78 @@ export async function startTournament(db: Db, roomId: string, hostId: string, rn
   return loadRoomView(db, roomId);
 }
 
-export type JudgeStep =
-  | { kind: "decided"; match: PublicMatch; next: PublicMatch | null; finished: false }
-  | { kind: "decided"; match: PublicMatch; next: null; finished: true; championAnswerId: number }
-  | { kind: "idle" };
-
-async function runningGame(db: Db, roomId: string): Promise<Game | null> {
-  const loaded = await loadRoom(db, roomId);
-  return loaded && loaded.game.status === "running" ? loaded.game : null;
-}
-
-/** 次に判定すべき試合 (無ければ null) */
-export async function peekNextMatch(db: Db, roomId: string) {
-  const game = await runningGame(db, roomId);
-  if (!game) return null;
-  const all = await db.select().from(matches).where(eq(matches.gameId, game.id));
-  return nextPlayable(all);
-}
-
 /**
- * 1 試合を判定して保存し、勝者を次の試合へ進める (進出先が不戦勝なら、その先まで進める)。
- * Durable Object からだけ呼ぶ (直列実行前提)。
+ * いま判定できる試合 (出場者が 2 人そろった未決着の試合) をまとめて判定し、勝者を進める。
+ * 1 回の呼び出しで 1 ラウンド分進む。決勝まで決まったら試合を finished にし、
+ * その時刻を startedAt (= 時刻表の起点) として記録する。
+ *
+ * Jev が失敗した試合は、止めずに仮判定で決める。
+ * 戻り値は判定が終わったか (finished) どうか。
  */
-export async function judgeMatch(db: Db, roomId: string, match: Match, judge: Judge): Promise<JudgeStep> {
-  const game = await runningGame(db, roomId);
-  if (!game || game.id !== match.gameId) return { kind: "idle" };
+export async function judgeRound(db: Db, roomId: string, judge: Judge): Promise<{ finished: boolean }> {
+  const { game } = await requireActiveRoom(db, roomId);
+  if (game.status === "finished") return { finished: true };
+  if (game.status !== "running") throw new RoomError(409, "まだ開始されていません");
 
-  const texts = await db
-    .select({ id: answers.id, text: answers.text })
-    .from(answers)
-    .where(inArray(answers.id, [match.answerAId!, match.answerBId!]));
-  const textOf = (id: number) => texts.find((a) => a.id === id)!.text;
-
-  const result = await judge({ topic: game.topic, answerA: textOf(match.answerAId!), answerB: textOf(match.answerBId!) });
-  const winnerAnswerId = result.winner === "A" ? match.answerAId! : match.answerBId!;
-
-  // 判定中に別の処理が決着させていないか、条件付き更新で確かめる
-  const [decided] = await db
-    .update(matches)
-    .set({ winnerAnswerId, probA: result.probA, judge: result.judge, judgedAt: NOW })
-    .where(and(eq(matches.id, match.id), isNull(matches.winnerAnswerId)))
-    .returning();
-  if (!decided) return { kind: "idle" };
-
-  // 勝者を進出先へ。不戦勝の枠を通り抜ける分もまとめて保存する
   const all = await db.select().from(matches).where(eq(matches.gameId, game.id));
-  const self = all.find((m) => m.id === decided.id)!;
-  self.winnerAnswerId = null; // advance で改めて入れる
-  const changed = advance(all, self, winnerAnswerId).filter((m) => m.id !== decided.id);
-  for (const m of changed) {
-    await db
-      .update(matches)
-      .set({
-        answerAId: m.answerAId,
-        answerBId: m.answerBId,
-        winnerAnswerId: m.winnerAnswerId,
-        ...(m.winnerAnswerId !== null ? { judgedAt: NOW } : {}),
-      })
-      .where(eq(matches.id, m.id));
-  }
-  await touchRoom(db, roomId);
+  const playable = all.filter(
+    (m) => m.judge !== "bye" && m.winnerAnswerId === null && m.answerAId !== null && m.answerBId !== null,
+  );
 
-  // 決勝 (進出先なし) まで勝ち上がっていたら決着
-  const final = all.find((m) => m.nextSlot === null);
-  if (final?.winnerAnswerId != null) {
-    await db
-      .update(games)
-      .set({ status: "finished", championAnswerId: final.winnerAnswerId, finishedAt: NOW })
-      .where(eq(games.id, game.id));
-    return { kind: "decided", match: toPublicMatch(decided), next: null, finished: true, championAnswerId: final.winnerAnswerId };
+  if (playable.length > 0) {
+    const ids = playable.flatMap((m) => [m.answerAId!, m.answerBId!]);
+    const texts = new Map(
+      (await db.select({ id: answers.id, text: answers.text }).from(answers).where(inArray(answers.id, ids))).map(
+        (a) => [a.id, a.text],
+      ),
+    );
+    const fallback = createMockJudge();
+    const results = await Promise.all(
+      playable.map(async (m): Promise<JudgeResult> => {
+        const input = { topic: game.topic, answerA: texts.get(m.answerAId!)!, answerB: texts.get(m.answerBId!)! };
+        try {
+          return await judge(input);
+        } catch (error) {
+          console.error(`[judge] match=${m.id} failed, 仮判定に切り替えます: ${String(error)}`);
+          return fallback(input);
+        }
+      }),
+    );
+
+    // 勝者を進める (不戦勝の枠を通り抜ける分も含む)。書き込みは 1 回のバッチにまとめる
+    const changed = new Map<number, Match>();
+    playable.forEach((m, i) => {
+      const r = results[i]!;
+      for (const c of advance(all, m, r.winner === "A" ? m.answerAId! : m.answerBId!)) changed.set(c.id, c);
+      m.probA = r.probA;
+      m.judge = r.judge;
+      changed.set(m.id, m);
+    });
+    const decidedIds = new Set(playable.map((m) => m.id));
+    const writes = [...changed.values()].map((m) =>
+      db
+        .update(matches)
+        .set({
+          answerAId: m.answerAId,
+          answerBId: m.answerBId,
+          winnerAnswerId: m.winnerAnswerId,
+          probA: m.probA,
+          judge: m.judge,
+          ...(m.winnerAnswerId !== null ? { judgedAt: NOW } : {}),
+        })
+        // 判定した試合は、別の呼び出しが先に決めていたら上書きしない
+        .where(decidedIds.has(m.id) ? and(eq(matches.id, m.id), isNull(matches.winnerAnswerId)) : eq(matches.id, m.id)),
+    );
+    await db.batch([writes[0]!, ...writes.slice(1), touchRoom(db, roomId)]);
   }
-  // 表示側には、次に試合をする枠 (不戦勝を通り抜けた先) を渡す
-  const next = changed.find((m) => m.winnerAnswerId === null) ?? null;
-  return { kind: "decided", match: toPublicMatch(decided), next: next && toPublicMatch(next), finished: false };
+
+  const final = all.find((m) => m.nextSlot === null);
+  if (final?.winnerAnswerId == null) return { finished: false };
+  await db
+    .update(games)
+    .set({ status: "finished", championAnswerId: final.winnerAnswerId, startedAt: NOW, finishedAt: NOW })
+    .where(and(eq(games.id, game.id), eq(games.status, "running")));
+  return { finished: true };
 }
 
 /**
