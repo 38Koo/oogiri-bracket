@@ -4,7 +4,6 @@ import { and, asc, count, db, eq } from "void/db";
 import { z } from "zod";
 import { answerBlocker } from "../../../../src/lib/rules";
 import { LIMITS } from "../../../../src/lib/types";
-import { live, publishRoomEvent } from "../../../../src/live";
 import { credentials, errorResponse } from "../../../../src/server/http";
 import { authenticate, loadRoom, requireActiveRoom, touchRoom } from "../../../../src/server/rooms";
 
@@ -50,6 +49,5 @@ export const POST = defineHandler.withValidator({
     db.insert(answers).values({ roomId, gameId: game.id, participantId: me.id, text: body.text }).returning(),
     touchRoom(db, roomId),
   ]);
-  await publishRoomEvent(live, roomId, { type: "answer_submitted", participantId: me.id, answerCount: mine!.n + 1 });
   return { id: created!.id, text: created!.text };
 });

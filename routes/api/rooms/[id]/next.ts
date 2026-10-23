@@ -3,7 +3,6 @@ import { db } from "void/db";
 import { z } from "zod";
 import { MAX_ANSWER_LIMIT } from "../../../../src/lib/rules";
 import { LIMITS } from "../../../../src/lib/types";
-import { live, publishRoomEvent } from "../../../../src/live";
 import { credentials, errorResponse } from "../../../../src/server/http";
 import { rejectIfInappropriate } from "../../../../src/server/moderation";
 import { authenticate, startNextGame } from "../../../../src/server/rooms";
@@ -29,7 +28,6 @@ export const POST = defineHandler.withValidator({
 
   try {
     const view = await startNextGame(db, roomId, me.id, body);
-    await publishRoomEvent(live, roomId, { type: "game_started", view: view! });
     return view;
   } catch (error) {
     return errorResponse(c, error);

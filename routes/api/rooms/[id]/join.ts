@@ -4,7 +4,6 @@ import { db } from "void/db";
 import { z } from "zod";
 import { secretToken, sha256, shortId } from "../../../../src/lib/ids";
 import { LIMITS } from "../../../../src/lib/types";
-import { live, publishRoomEvent } from "../../../../src/live";
 import { errorResponse } from "../../../../src/server/http";
 import { rejectIfInappropriate } from "../../../../src/server/moderation";
 import { requireActiveRoom, touchRoom } from "../../../../src/server/rooms";
@@ -29,9 +28,5 @@ export const POST = defineHandler.withValidator({
     db.insert(participants).values({ id: participantId, roomId, nickname: body.nickname, tokenHash: await sha256(token) }),
     touchRoom(db, roomId),
   ]);
-  await publishRoomEvent(live, roomId, {
-    type: "participant_joined",
-    participant: { id: participantId, nickname: body.nickname, answerCount: 0 },
-  });
   return { participantId, token };
 });

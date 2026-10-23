@@ -8,8 +8,7 @@
     "preview": "vp preview",
     "test": "vp test run --config vitest.config.ts",
     "typecheck": "void prepare && tsc --noEmit",
-    "moderation:check": "node --experimental-strip-types --no-warnings scripts/check-moderation.ts",
-    "diagnose:live": "node --experimental-strip-types --no-warnings scripts/diagnose-live.ts"
+    "moderation:check": "node --experimental-strip-types --no-warnings scripts/check-moderation.ts"
   },
   "dependencies": {
     "@typesafe-ai/sdk": "0.7.0",
