@@ -8,10 +8,11 @@ type Props = {
   champion: PublicAnswer | undefined;
   /** このルームの参加者として認証できている場合だけ渡す */
   me: Credentials | null;
+  onChanged: (view: RoomView) => void;
 };
 
 /** 決着後: 優勝した回答と、次の行動 (出題者は次の試合の設定、ほかの人は待つ) */
-export function ResultPanel({ view, champion, me }: Props) {
+export function ResultPanel({ view, champion, me, onChanged }: Props) {
   const isHost = me?.participantId === view.room.hostParticipantId;
   return (
     <>
@@ -30,7 +31,7 @@ export function ResultPanel({ view, champion, me }: Props) {
           </Link>
         </div>
       </section>
-      {isHost && <NextGameForm view={view} credentials={me!} />}
+      {isHost && <NextGameForm view={view} credentials={me!} onStarted={onChanged} />}
     </>
   );
 }

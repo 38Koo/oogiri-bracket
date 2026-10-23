@@ -9,7 +9,15 @@ import { useHydrated } from "../useHydrated";
  * 決着後に出題者が次の試合を設定する。お題・1 人あたりの回答数・次も参加するメンバーを選ぶ。
  * 外したメンバーは次の試合から参加者ではなくなる (過去の回答は残る)。
  */
-export function NextGameForm({ view, credentials }: { view: RoomView; credentials: Credentials }) {
+export function NextGameForm({
+  view,
+  credentials,
+  onStarted,
+}: {
+  view: RoomView;
+  credentials: Credentials;
+  onStarted: (view: RoomView) => void;
+}) {
   const hostId = view.room.hostParticipantId;
   const [topic, setTopic] = useState("");
   const [limit, setLimit] = useState<number | null>(view.room.maxAnswersPerParticipant);
@@ -31,12 +39,13 @@ export function NextGameForm({ view, credentials }: { view: RoomView; credential
     setPending(true);
     setError(null);
     try {
-      await fetch("/api/rooms/:id/next", {
+      const next = await fetch("/api/rooms/:id/next", {
         method: "POST",
         params: { id: view.room.id },
         headers: authHeaders(credentials),
         body: { topic, maxAnswersPerParticipant: limit, removeParticipantIds: [...removed] },
       });
+      onStarted(next as RoomView);
       // 画面は game_started の配信 (または取り直し) で次の試合に切り替わる
     } catch (e) {
       setError(errorMessage(e));

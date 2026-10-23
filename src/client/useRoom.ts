@@ -1,217 +1,188 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { fetch } from "void/client";
-import { connectLiveStream } from "void/live/client";
 import { mergeView } from "../lib/mergeView";
-import { roomTopic, type PublicMatch, type RoomEvent, type RoomView } from "../lib/types";
+import {
+  maskMatches,
+  playbackOrder,
+  playbackPhase,
+  slotStartLookup,
+  TREE_REVEAL_OFFSET,
+  type PlaybackPhase,
+} from "../lib/schedule";
+import type { PublicMatch, RoomStatus, RoomView } from "../lib/types";
+import { authHeaders, type Credentials } from "./credentials";
 
-/** 演出の尺。サーバーの試合間隔 (5.5 秒) に収まるようにする。 */
-export const TIMING = {
-  /** 幕が開いて 2 つの回答が並ぶまで + 判定待ちの「溜め」 */
-  judging: 1_900,
-  /** 判定バーが伸びきるまで */
-  reveal: 1_600,
-  /** 勝者が表に書き込まれてから次の試合まで */
-  settle: 700,
+/** 場面ごとに、ルームの状態を取り直す間隔 */
+const POLL_MS = {
+  collecting: 3_000,
+  /** Jev の判定中は、進み具合と「判定が終わった」をすぐ拾いたい */
+  judging: 1_500,
+  /** 再生中。サーバーは 6 秒先の試合まで渡すので、それより短ければ途切れない */
+  playback: 2_500,
+  /** 決着後。出題者が次の試合を始めたことに気づくため */
+  finished: 5_000,
 } as const;
-
-/** 受信からこれ以上たったイベントは、演出せずにすぐ反映する (裏に回っていた端末の追いつき用) */
-const STALE_AFTER_MS = 3_000;
-/** 取りこぼし対策で、ルームの状態を定期的に取り直す間隔 */
-const RESYNC_INTERVAL_MS = 8_000;
-/** タブが裏に回ってから配信を切るまでの猶予 */
-const HIDDEN_DISCONNECT_MS = 30_000;
-
-type Queued = { event: RoomEvent; receivedAt: number };
+/** 時刻表を進める (画面を描き直す) 間隔 */
+const TICK_MS = 200;
+/** 判定が止まって見えたら、出題者以外の画面が代わりに判定を進めるまでの時間 */
+const RESCUE_AFTER_MS = 25_000;
 
 export type Spotlight =
-  | { phase: "judging"; matchId: number; note?: string }
+  | { phase: "judging"; matchId: number }
   | { phase: "decided"; matchId: number; match: PublicMatch };
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const prefersReducedMotion = () =>
-  typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-function upsertMatches(matches: PublicMatch[], updates: Array<PublicMatch | null>) {
-  const next = [...matches];
-  for (const u of updates) {
-    if (!u) continue;
-    const i = next.findIndex((m) => m.id === u.id);
-    if (i === -1) next.push(u);
-    else next[i] = u;
-  }
-  return next;
-}
 
 /**
- * ルームの状態を持ち、void/live のイベントを「演出の順番どおりに」反映する。
- * サーバーは判定開始と結果をほぼ同時に送ってくるので、クライアント側でキューに積んで間を取る。
+ * ルームの状態を数秒おきに取り直し、時刻表どおりの場面を計算する。
+ *
+ * 結果は開始時に全部決まっているので、サーバーからの配信は使わない。
+ * 各画面はサーバー時刻に合わせた時計で「いま何試合目のどの場面か」を計算するだけなので、
+ * 途中から開いても、裏に回っていても、戻ってきた瞬間に全員と同じ場面になる。
  */
-export function useRoom(initial: RoomView) {
+export function useRoom(initial: RoomView, credentials: Credentials | null) {
   const [view, setView] = useState(initial);
-  const [spotlight, setSpotlight] = useState<Spotlight | null>(null);
-  const queue = useRef<Queued[]>([]);
-  const draining = useRef(false);
-  /** 演出中に取り直した状態。演出が終わってから重ねる (勝敗のネタバレを防ぐ) */
-  const pendingFresh = useRef<RoomView | null>(null);
+  /** サーバー時刻 - 端末の時刻 */
+  const offset = useRef(initial.serverNow - Date.now());
   const roomId = initial.room.id;
+
+  const accept = useCallback((fresh: RoomView) => {
+    offset.current = fresh.serverNow - Date.now();
+    setView((v) => mergeView(v, fresh));
+  }, []);
 
   const resync = useCallback(async () => {
     try {
-      const fresh = await fetch("/api/rooms/:id", { params: { id: roomId } });
-      // 進む方向にだけ重ねるので、応答が遅れて届いても表示は巻き戻らない。
-      // 演出中に重ねると、舞台で結果を出す前に表へ勝者が書き込まれてしまうので後回しにする
-      if (draining.current) pendingFresh.current = fresh as RoomView;
-      else setView((v) => mergeView(v, fresh as RoomView));
+      accept((await fetch("/api/rooms/:id", { params: { id: roomId } })) as RoomView);
     } catch {
-      // 一時的な失敗は次のイベントか再表示時に回復する
+      // 一時的な失敗は次の取り直しで回復する
     }
-  }, [roomId]);
+  }, [roomId, accept]);
 
-  const apply = useCallback(async (event: RoomEvent, animate: boolean) => {
-    const fast = !animate || prefersReducedMotion();
-    switch (event.type) {
-      case "participant_joined":
-        setView((v) =>
-          v.participants.some((p) => p.id === event.participant.id)
-            ? v
-            : { ...v, participants: [...v.participants, event.participant] },
-        );
-        return;
-      case "answer_submitted":
-        setView((v) => ({
-          ...v,
-          participants: v.participants.map((p) =>
-            p.id === event.participantId ? { ...p, answerCount: event.answerCount } : p,
-          ),
-        }));
-        return;
-      case "tournament_started":
-        setView((v) => mergeView(v, event.view));
-        return;
-      case "match_judging":
-        setSpotlight((s) =>
-          // 再試行で同じ試合の判定開始が再送されたときは、待ちの注記を残す
-          s?.phase === "judging" && s.matchId === event.matchId ? s : { phase: "judging", matchId: event.matchId },
-        );
-        if (!fast) await sleep(TIMING.judging);
-        return;
-      case "match_delayed":
-        setSpotlight({
-          phase: "judging",
-          matchId: event.matchId,
-          note: event.fallback
-            ? "Jev から応答がないため、この試合は仮の判定で進めます"
-            : "Jev の応答が遅れています。もう一度判定しています",
-        });
-        return;
-      case "match_decided":
-        setSpotlight({ phase: "decided", matchId: event.match.id, match: event.match });
-        if (!fast) await sleep(TIMING.reveal);
-        setView((v) => ({ ...v, matches: upsertMatches(v.matches, [event.match, event.next]) }));
-        if (!fast) await sleep(TIMING.settle);
-        return;
-      case "game_started":
-        // 次の試合へ。前の試合の演出は残さない
-        setSpotlight(null);
-        setView((v) => mergeView(v, event.view));
-        return;
-      case "tournament_finished":
-        setSpotlight(null);
-        setView((v) => ({
-          ...v,
-          room: { ...v.room, status: "finished", championAnswerId: event.championAnswerId },
-        }));
-        return;
-    }
-  }, []);
+  // --- 時計 -------------------------------------------------------------
+  const [now, setNow] = useState(() => Date.now() + offset.current);
+  const startsAt = view.room.playbackStartsAt;
+  const order = useMemo(() => playbackOrder(view.matches), [view.matches]);
+  const phase: PlaybackPhase | null = startsAt === null ? null : playbackPhase(order, startsAt, now);
+  const playing = phase !== null && phase.kind !== "done";
 
-  const drain = useCallback(async () => {
-    if (draining.current) return;
-    draining.current = true;
-    try {
-      for (let q = queue.current.shift(); q; q = queue.current.shift()) {
-        // 画面が裏にある間・古くなったイベントは演出を省いて一気に反映し、いまの対戦に追いつく
-        const animate = document.visibilityState === "visible" && Date.now() - q.receivedAt < STALE_AFTER_MS;
-        await apply(q.event, animate);
-      }
-    } finally {
-      draining.current = false;
-      const fresh = pendingFresh.current;
-      pendingFresh.current = null;
-      if (fresh) setView((v) => mergeView(v, fresh));
-    }
-  }, [apply]);
-
-  // 配信の接続 1 本ごとに Durable Object が開きっぱなしになり、稼働時間 (無料枠は 1 日 13,000 GB-s) を食う。
-  // 演出が要る「募集中・対戦中」で、画面を見ているときだけつなぐ。それ以外は取り直しで追いつく。
-  const [away, setAway] = useState(false);
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const onVisibility = () => {
-      clearTimeout(timer);
-      if (document.visibilityState === "visible") {
-        setAway(false);
-        void resync();
-      } else {
-        // アプリの切り替え程度で切らないよう、少し待ってから切る
-        timer = setTimeout(() => setAway(true), HIDDEN_DISCONNECT_MS);
-      }
-    };
-    document.addEventListener("visibilitychange", onVisibility);
-    return () => {
-      document.removeEventListener("visibilitychange", onVisibility);
-      clearTimeout(timer);
-    };
-  }, [resync]);
+    if (!playing) return;
+    const timer = setInterval(() => setNow(Date.now() + offset.current), TICK_MS);
+    return () => clearInterval(timer);
+  }, [playing]);
 
-  // 決着後・期限切れは演出するイベントがない (次の試合の開始は取り直しで拾う)
-  const settled = view.room.status === "finished" || view.room.expired;
-  const connected = !away && !settled;
+  // --- 表示する状態 ------------------------------------------------------
+  // サーバーは再生が終わるまで running を返すが、端末の時計で終わっていれば先に決着を出す
+  const status: RoomStatus = phase?.kind === "done" ? "finished" : view.room.status;
+  const judging = view.room.status === "running" && startsAt === null;
 
-  // 取りこぼし対策と、接続していない間の追いつき用に、見ている間は定期的に取り直す
+  const treeMatches = useMemo(() => {
+    if (!playing || startsAt === null) return view.matches;
+    const slot = slotStartLookup(order, startsAt);
+    return maskMatches(view.matches, (id) => slot(id) + TREE_REVEAL_OFFSET, now);
+  }, [playing, startsAt, order, view.matches, now]);
+
+  const spotlight: Spotlight | null = useMemo(() => {
+    if (phase?.kind !== "match") return null;
+    const match = view.matches.find((m) => m.id === phase.matchId);
+    // 結果がまだ手元に届いていなければ、届くまで「判定中」のまま待つ
+    if (phase.phase === "judging" || !match || match.winnerAnswerId === null) {
+      return { phase: "judging", matchId: phase.matchId };
+    }
+    return { phase: "decided", matchId: phase.matchId, match };
+  }, [phase?.kind === "match" ? phase.matchId : null, phase?.kind === "match" ? phase.phase : null, view.matches]);
+
+  const championAnswerId =
+    status === "finished"
+      ? (view.room.championAnswerId ?? view.matches.find((m) => m.nextSlot === null)?.winnerAnswerId ?? null)
+      : null;
+
+  // --- 取り直し ----------------------------------------------------------
+  const pollMs = view.room.expired
+    ? null
+    : status === "collecting"
+      ? POLL_MS.collecting
+      : judging
+        ? POLL_MS.judging
+        : status === "running"
+          ? POLL_MS.playback
+          : POLL_MS.finished;
+
   useEffect(() => {
-    if (view.room.expired) return;
+    if (pollMs === null) return;
     const timer = setInterval(() => {
       if (document.visibilityState === "visible") void resync();
-    }, RESYNC_INTERVAL_MS);
+    }, pollMs);
     return () => clearInterval(timer);
-  }, [view.room.expired, resync]);
+  }, [pollMs, resync]);
 
   useEffect(() => {
-    if (!connected) return;
-    let errorResync: ReturnType<typeof setTimeout> | undefined;
-    const stream = connectLiveStream("/live", {
-      retryDelay: 1_500,
-      // 切断中のイベントは届かない (at-most-once) ので、再接続の頃合いで取り直す
-      onError() {
-        clearTimeout(errorResync);
-        errorResync = setTimeout(() => void resync(), 3_000);
-      },
-    });
-    let unsubscribe: (() => Promise<void>) | undefined;
-    stream
-      .subscribe<RoomEvent>({
-        id: "room",
-        topic: roomTopic(roomId),
-        onEvent(event) {
-          queue.current.push({ event: event.data as RoomEvent, receivedAt: Date.now() });
-          void drain();
-        },
-      })
-      .then((u) => {
-        unsubscribe = u;
-        // 購読完了までの間に起きた変化を取りこぼさないよう一度取り直す
-        void resync();
-      })
-      .catch(() => void resync());
-
-    return () => {
-      clearTimeout(errorResync);
-      // close() の後に解除が終わると "stream is closed" で reject されるので握りつぶす
-      unsubscribe?.().catch(() => {});
-      stream.close();
+    const onVisible = () => {
+      if (document.visibilityState !== "visible") return;
+      setNow(Date.now() + offset.current);
+      void resync();
     };
-  }, [connected, roomId, drain, resync]);
+    document.addEventListener("visibilitychange", onVisible);
+    // サーバーで描いた状態から、表示までの間に進んだ分を取り直す
+    void resync();
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [resync]);
 
-  return { view, setView, spotlight, resync };
+  // 出題者に外された人は、保存しているトークンがあっても参加者として扱わない
+  const me = useMemo(
+    () => (credentials && view.participants.some((p) => p.id === credentials.participantId) ? credentials : null),
+    [credentials, view.participants],
+  );
+
+  // --- 判定を進める ------------------------------------------------------
+  // 出題者の画面が、判定が終わるまで 1 ラウンドずつ POST /judge を呼ぶ。
+  // 出題者が抜けて止まったら、ほかの参加者の画面が代わりに呼ぶ。
+  const shouldJudge = useRef(false);
+  const judgeInflight = useRef(false);
+  const isHost = me?.participantId === view.room.hostParticipantId;
+
+  const driveJudge = useCallback(async () => {
+    if (!me || judgeInflight.current) return;
+    judgeInflight.current = true;
+    try {
+      while (shouldJudge.current) {
+        try {
+          const fresh = (await fetch("/api/rooms/:id/judge", {
+            method: "POST",
+            params: { id: roomId },
+            headers: authHeaders(me),
+          })) as RoomView;
+          accept(fresh);
+          if (fresh.room.playbackStartsAt !== null || fresh.room.status !== "running" || fresh.room.expired) break;
+        } catch {
+          await sleep(2_000);
+        }
+      }
+    } finally {
+      judgeInflight.current = false;
+    }
+  }, [me, roomId, accept]);
+
+  // 出題者以外は、判定の進み具合が RESCUE_AFTER_MS 変わらなければ代わりに進める
+  const [rescue, setRescue] = useState(false);
+  const progress = view.room.judging?.done ?? 0;
+  useEffect(() => {
+    if (!judging) setRescue(false);
+  }, [judging]);
+  useEffect(() => {
+    if (!judging || isHost || !me || rescue) return;
+    const timer = setTimeout(() => setRescue(true), RESCUE_AFTER_MS);
+    return () => clearTimeout(timer);
+  }, [judging, isHost, me, rescue, progress]);
+
+  useEffect(() => {
+    shouldJudge.current = judging && me !== null && (isHost || rescue);
+    if (shouldJudge.current) void driveJudge();
+    return () => {
+      shouldJudge.current = false;
+    };
+  }, [judging, me, isHost, rescue, driveJudge]);
+
+  return { view, me, accept, resync, status, judging, phase, spotlight, treeMatches, championAnswerId };
 }

@@ -11,9 +11,13 @@ type Props = {
   view: RoomView;
   credentials: Credentials | null;
   onJoined: (c: Credentials) => void;
+  /** サーバーが返した最新の状態を画面に反映する */
+  onChanged: (view: RoomView) => void;
+  /** 状態を取り直す (回答を出したあと、自分の回答数をすぐ反映するため) */
+  onRefresh: () => void;
 };
 
-export function Lobby({ view, credentials, onJoined }: Props) {
+export function Lobby({ view, credentials, onJoined, onChanged, onRefresh }: Props) {
   const roomId = view.room.id;
   const isHost = credentials?.participantId === view.room.hostParticipantId;
   const limit = view.room.maxAnswersPerParticipant;
@@ -25,7 +29,7 @@ export function Lobby({ view, credentials, onJoined }: Props) {
       <section>
         <ShareLink roomId={roomId} />
         {credentials ? (
-          <MyAnswers roomId={roomId} credentials={credentials} limit={limit} />
+          <MyAnswers roomId={roomId} credentials={credentials} limit={limit} onPosted={onRefresh} />
         ) : (
           <JoinForm roomId={roomId} onJoined={onJoined} />
         )}
@@ -45,7 +49,7 @@ export function Lobby({ view, credentials, onJoined }: Props) {
             </li>
           ))}
         </ul>
-        {isHost && <StartButton roomId={roomId} credentials={credentials!} blocker={blocker} />}
+        {isHost && <StartButton roomId={roomId} credentials={credentials!} blocker={blocker} onStarted={onChanged} />}
         {!isHost && <p className="hint">出題者がトーナメントを始めるまで、回答はほかの人には見えません。</p>}
       </aside>
     </div>
@@ -133,7 +137,17 @@ export function JoinForm({
   );
 }
 
-function MyAnswers({ roomId, credentials, limit }: { roomId: string; credentials: Credentials; limit: number | null }) {
+function MyAnswers({
+  roomId,
+  credentials,
+  limit,
+  onPosted,
+}: {
+  roomId: string;
+  credentials: Credentials;
+  limit: number | null;
+  onPosted: () => void;
+}) {
   const [mine, setMine] = useState<Array<{ id: number; text: string }>>([]);
   const [text, setText] = useState("");
   const [pending, setPending] = useState(false);
@@ -158,6 +172,7 @@ function MyAnswers({ roomId, credentials, limit }: { roomId: string; credentials
       });
       setMine((m) => [...m, created]);
       setText("");
+      onPosted();
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -205,7 +220,17 @@ function MyAnswers({ roomId, credentials, limit }: { roomId: string; credentials
   );
 }
 
-function StartButton({ roomId, credentials, blocker }: { roomId: string; credentials: Credentials; blocker: string | null }) {
+function StartButton({
+  roomId,
+  credentials,
+  blocker,
+  onStarted,
+}: {
+  roomId: string;
+  credentials: Credentials;
+  blocker: string | null;
+  onStarted: (view: RoomView) => void;
+}) {
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -213,7 +238,13 @@ function StartButton({ roomId, credentials, blocker }: { roomId: string; credent
     setPending(true);
     setError(null);
     try {
-      await fetch("/api/rooms/:id/start", { method: "POST", params: { id: roomId }, headers: authHeaders(credentials) });
+      const view = await fetch("/api/rooms/:id/start", {
+        method: "POST",
+        params: { id: roomId },
+        headers: authHeaders(credentials),
+      });
+      // ここから判定中の画面に切り替わり、出題者の画面が判定を進める
+      onStarted(view as RoomView);
     } catch (e) {
       setError(errorMessage(e));
       setPending(false);

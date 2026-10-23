@@ -1,6 +1,7 @@
 import { Link } from "@void/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { History } from "../../src/client/components/History";
+import { JudgingShow } from "../../src/client/components/JudgingShow";
 import { JoinForm, Lobby } from "../../src/client/components/Lobby";
 import { ResultPanel } from "../../src/client/components/ResultPanel";
 import { Stage } from "../../src/client/components/Stage";
@@ -25,18 +26,21 @@ export default function RoomPage({ view }: Props) {
 }
 
 function Room({ initial }: { initial: RoomView }) {
-  const { view, spotlight } = useRoom(initial);
   const [credentials, setCredentials] = useState<Credentials | null>(null);
   useEffect(() => setCredentials(loadCredentials(initial.room.id)), [initial.room.id]);
+  const { view, me, accept, resync, status, judging, phase, spotlight, treeMatches, championAnswerId } = useRoom(
+    initial,
+    credentials,
+  );
 
   const answers = useMemo(() => new Map(view.answers.map((a) => [a.id, a])), [view.answers]);
   const answerOf = useCallback((id: number | null) => (id === null ? undefined : answers.get(id)), [answers]);
   const totalRounds = view.matches.length ? Math.max(...view.matches.map((m) => m.round)) + 1 : 0;
   const { room } = view;
-  // 出題者に外された人は、保存しているトークンがあっても参加者として扱わない
-  const me = credentials && view.participants.some((p) => p.id === credentials.participantId) ? credentials : null;
-  // 最後の試合の演出が終わるまでは優勝を出さない
-  const showResult = room.status === "finished" && !spotlight;
+  const onJoined = (c: Credentials) => {
+    setCredentials(c);
+    void resync();
+  };
 
   if (room.expired) {
     return (
@@ -59,18 +63,21 @@ function Room({ initial }: { initial: RoomView }) {
         <h1>{room.topic}</h1>
         <p className="status">
           {room.gameNumber > 1 && `第 ${room.gameNumber} 試合・`}
-          {room.status === "collecting" && "回答を募集しています"}
-          {room.status === "running" && `トーナメント中・回答 ${view.answers.length} 件`}
-          {room.status === "finished" && `決着しました・回答 ${view.answers.length} 件`}
+          {status === "collecting" && "回答を募集しています"}
+          {judging && `Jev が審査しています・回答 ${view.answers.length} 件`}
+          {status === "running" && !judging && `トーナメント中・回答 ${view.answers.length} 件`}
+          {status === "finished" && `決着しました・回答 ${view.answers.length} 件`}
         </p>
       </header>
 
-      {room.status === "collecting" ? (
-        <Lobby view={view} credentials={me} onJoined={setCredentials} />
+      {status === "collecting" ? (
+        <Lobby view={view} credentials={me} onJoined={onJoined} onChanged={accept} onRefresh={resync} />
       ) : (
         <>
-          {showResult ? (
-            <ResultPanel view={view} champion={answerOf(room.championAnswerId)} me={me} />
+          {status === "finished" ? (
+            <ResultPanel view={view} champion={answerOf(championAnswerId)} me={me} onChanged={accept} />
+          ) : judging || phase?.kind === "opening" ? (
+            <JudgingShow view={view} answerOf={answerOf} startsIn={phase?.kind === "opening" ? phase.startsIn : null} />
           ) : (
             <Stage spotlight={spotlight} matches={view.matches} answerOf={answerOf} totalRounds={totalRounds} />
           )}
@@ -78,7 +85,7 @@ function Room({ initial }: { initial: RoomView }) {
             <div className="late-join">
               <JoinForm
                 roomId={room.id}
-                onJoined={setCredentials}
+                onJoined={onJoined}
                 title="次の試合から参加する"
                 hint="いまの試合には回答できませんが、次の試合から一緒に遊べます。"
               />
@@ -87,10 +94,10 @@ function Room({ initial }: { initial: RoomView }) {
           <section className="tree-section">
             <h2>トーナメント表</h2>
             <TournamentTree
-              matches={view.matches}
+              matches={treeMatches}
               answerOf={answerOf}
               liveMatchId={spotlight?.matchId ?? null}
-              championAnswerId={showResult ? room.championAnswerId : null}
+              championAnswerId={championAnswerId}
             />
           </section>
         </>
