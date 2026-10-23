@@ -23,7 +23,6 @@ pnpm dev          # http://localhost:5173
 pnpm test         # ロジックのユニットテスト (Void ランタイムを使わない)
 pnpm typecheck
 pnpm moderation:check   # 不適切判定を本物の Jev で試す (しきい値の調整用)
-pnpm diagnose:live <URL>  # デプロイ先でライブ配信が届いているか確かめる
 ```
 
 ### 環境変数 (`.env`)
@@ -47,27 +46,31 @@ src/lib/bracket.ts           トーナメント表の生成・進行 (各ラウ�
 src/lib/treeLayout.ts        下から上へ勝ち上がる表の座標計算 (純粋関数 + テスト)
 src/lib/rules.ts             回答数の上限・開始条件
 src/lib/judge.ts             Jev 判定 (左右をランダムに入れ替えて位置バイアスを打ち消す) / 仮判定
-src/server/rooms.ts          ルームの読み出し、開始、1 試合の判定と勝者の繰り上げ
-durable-objects/tournament.ts  ルームごとの進行役。alarm で 1 試合ずつ判定して配信
-src/live.ts, routes/live.ts  void/live (SSE) の room:<id> トピック
-routes/api/...               お題作成・参加・回答・開始・次の試合
+src/lib/schedule.ts          再生の時刻表と、時刻に応じた結果の伏せ方 (純粋関数 + テスト)
+src/server/rooms.ts          ルームの読み出し (時刻表に沿って伏せる)、開始、1 ラウンドずつの判定
+durable-objects/tournament.ts  使っていない空の定義 (デプロイ済みクラスの削除を決めるまで残す)
+routes/api/...               お題作成・参加・回答・開始・判定・次の試合
 pages/                       トップ / ルーム (/r/:id)
-src/client/useRoom.ts        ライブイベントを演出の順にキューで再生するフック
+src/client/useRoom.ts        取り直しと、サーバー時刻に合わせた時計で場面を計算するフック
+src/client/components/JudgingShow.tsx  判定待ちの選手入場・進み具合・カウントダウン
 ```
 
 ### 進行の流れ
 
 ```
-ホスト POST /api/rooms/:id/start
-  └─ 表を作成 (1 回戦の bye はここで確定) → status=running → tournament_started を配信
-  └─ Tournament DO.start(roomId) → alarm
-        alarm: 次の試合を選ぶ → match_judging 配信 → Jev 判定 → D1 に保存・勝者を次の枠へ
-               → match_decided 配信 → 5.5 秒後に次の alarm (決勝なら tournament_finished)
+出題者 POST /api/rooms/:id/start   表を作成 (1 回戦の bye はここで確定) → status=running (判定中)
+出題者の画面 POST /api/rooms/:id/judge を繰り返す
+  └─ 出場者のそろった試合を 1 ラウンド分まとめて Jev で判定 → 勝者を次の枠へ
+  └─ 決勝まで決まったら status=finished、その時刻 (startedAt) が時刻表の起点
+全員の画面   GET /api/rooms/:id を数秒おきに取り直し、時刻表どおりに再生
+  └─ 起点 + 3 秒から 5.5 秒ごとに 1 試合 (不戦勝を除き、ラウンド・枠の順)
 ```
 
-- サーバーは判定開始と結果をほぼ同時に送るので、クライアント側でキューに積み、「対戦を出す → バーが伸びる → 表に書き込む」の間を取って再生する
-- `void/live` は at-most-once 配信のため、購読直後とタブ復帰時に `GET /api/rooms/:id` で状態を取り直す
-- Jev が 2 回続けて失敗した場合は、進行を止めないよう仮判定に切り替え、そのトーナメントの残りも仮判定で進める
+- 結果は開始時に全部決まるので、サーバーからの配信 (Durable Objects) は使わない。
+  各画面はサーバー時刻に合わせた時計で「いま何試合目のどの場面か」を計算するだけなので、途中から開いても全員と同じ場面になる
+- ネタバレ防止のため、GET は「いま + 6 秒」までに始まる試合の結果しか返さない。再生が終わるまでは status=running
+- Jev が失敗した試合は仮判定で決め、止めない
+- 出題者が判定の途中で抜けたら、25 秒後にほかの参加者の画面が代わりに判定を進める
 
 ### 設計上の決めごと (変更しにくい部分)
 
