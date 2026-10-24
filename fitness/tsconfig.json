@@ -1,0 +1,8 @@
+{
+  // 適応度関数は Node で動くので Node の型を足す。アプリ本体 (Workers) には Node の型を持ち込まない
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "types": ["void/env", "node"]
+  },
+  "include": ["."]
+}

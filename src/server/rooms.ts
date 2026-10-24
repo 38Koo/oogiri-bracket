@@ -1,4 +1,4 @@
-import { answers, games, matches, participants, rooms, type Game, type Match } from "@schema";
+import { answers, games, matches, participants, rooms, type Match } from "@schema";
 import { and, asc, count, desc, eq, inArray, isNull, sql, type db as defaultDb } from "void/db";
 import { advance, buildBracket, resolveInitialByes } from "../lib/bracket";
 import { secretToken, sha256, shortId } from "../lib/ids";

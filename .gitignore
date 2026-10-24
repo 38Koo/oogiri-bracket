@@ -12,3 +12,5 @@ dist
 # 秘密情報: Wrangler / Workers のローカル用シークレット
 .dev.vars
 .dev.vars.*
+
+coverage
