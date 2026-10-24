@@ -86,7 +86,7 @@ function planByes(count: number, rng: () => number): number[] {
     for (const c of candidates) search(pairUp(c.i), [...choices, c.i]);
   };
 
-  search(new Array<number>(count).fill(0), []);
+  search(Array.from({ length: count }, () => 0), []);
   return best!.choices;
 }
 
