@@ -1,0 +1,25 @@
+# 適応度関数をプッシュと PR のたびに回す
+name: fitness
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  fitness:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: voidzero-dev/setup-vp@v1.21.2
+        with:
+          node-version: "24"
+          cache: true
+      - name: 型 (公開データに秘密が混ざらないことも含む)
+        run: pnpm typecheck
+      - name: テスト (層の依存の向き・README の決めごと) と lib のカバレッジ
+        run: pnpm coverage
+      - name: 複雑さ・大きさ・循環 import
+        run: pnpm lint
+      - name: バンドルサイズ
+        run: pnpm build && pnpm bundle:check

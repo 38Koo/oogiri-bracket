@@ -25,6 +25,20 @@ pnpm typecheck
 pnpm moderation:check   # 不適切判定を本物の Jev で試す (しきい値の調整用)
 ```
 
+### 適応度関数
+
+設計上守りたい性質をチェックとして書き、プッシュと PR のたびに GitHub Actions (`.github/workflows/fitness.yml`) で回す。
+
+| 守る性質 | どこで | 実行 |
+| --- | --- | --- |
+| 層の依存の向き (lib は何にも依存しない、client はサーバー専用のものを持ち込まない など) | `fitness/layers.test.ts` | `pnpm test` |
+| トークンは DB にハッシュだけを持つ・公開データに秘密が混ざらない・時刻表より先の結果は見えない | `fitness/invariants.test.ts` | `pnpm test` / `pnpm typecheck` |
+| 関数の複雑さ 20 まで・1 ファイル 350 行まで・ネスト 4 段まで・循環 import なし・警告ゼロ | `vite.config.ts` の `lint` | `pnpm lint` |
+| `src/lib` のカバレッジ (行・関数 95% / 分岐 88%) | `vitest.config.ts` の `coverage` | `pnpm coverage` |
+| バンドルサイズ (Worker gzip 512 KiB / ブラウザ 160 KiB) | `scripts/check-bundle-size.ts` | `pnpm build && pnpm bundle:check` |
+
+上限を超えている既存のものは例外としていまの値に固定し、悪化だけを止めている (層の例外は `EXCEPTIONS`、複雑さは `lint.overrides`)。直したら例外を消す。
+
 ### 環境変数 (`.env`)
 
 | 名前               | 必須 | 説明                                                                        |
