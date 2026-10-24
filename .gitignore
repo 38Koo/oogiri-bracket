@@ -8,3 +8,7 @@ dist
 !.env.example
 *.tsbuildinfo
 .DS_Store
+
+# 秘密情報: Wrangler / Workers のローカル用シークレット
+.dev.vars
+.dev.vars.*
