@@ -1,6 +1,10 @@
 {
   "version": 1,
-  "source": {},
+  "source": {
+    "workers_dev": true,
+    "preview_urls": true,
+    "routes": []
+  },
   "resolved": {
     "durable_objects": {
       "bindings": [
@@ -17,7 +21,21 @@
           "TournamentDurableObject"
         ]
       }
-    ]
+    ],
+    "account_id": "b8a62ac3449b5c306ed1470a320f1d04",
+    "compatibility_date": "2026-02-24",
+    "d1_databases": [
+      {
+        "binding": "DB",
+        "database_name": "oogiri-bracket-db",
+        "database_id": "c805e44b-7fe8-4945-b402-3d645e3a3861",
+        "migrations_dir": "./db/migrations"
+      }
+    ],
+    "name": "oogiri-bracket",
+    "workers_dev": true,
+    "preview_urls": true,
+    "routes": []
   },
-  "text": "{\n  \"durable_objects\": {\n    \"bindings\": [\n      {\n        \"name\": \"TOURNAMENT\",\n        \"class_name\": \"TournamentDurableObject\"\n      }\n    ]\n  },\n  \"migrations\": [\n    {\n      \"tag\": \"void-durable-tournament-v1\",\n      \"new_sqlite_classes\": [\n        \"TournamentDurableObject\"\n      ]\n    }\n  ]\n}\n"
+  "text": "{\n  \"durable_objects\": {\n    \"bindings\": [\n      {\n        \"name\": \"TOURNAMENT\",\n        \"class_name\": \"TournamentDurableObject\"\n      }\n    ]\n  },\n  \"migrations\": [\n    {\n      \"tag\": \"void-durable-tournament-v1\",\n      \"new_sqlite_classes\": [\n        \"TournamentDurableObject\"\n      ]\n    }\n  ],\n  \"account_id\": \"b8a62ac3449b5c306ed1470a320f1d04\",\n  \"compatibility_date\": \"2026-02-24\",\n  \"d1_databases\": [\n    {\n      \"binding\": \"DB\",\n      \"database_name\": \"oogiri-bracket-db\",\n      \"database_id\": \"c805e44b-7fe8-4945-b402-3d645e3a3861\",\n      \"migrations_dir\": \"./db/migrations\"\n    }\n  ],\n  \"name\": \"oogiri-bracket\",\n  \"workers_dev\": true,\n  \"preview_urls\": true,\n  \"routes\": []\n}\n"
 }
