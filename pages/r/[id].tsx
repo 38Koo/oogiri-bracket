@@ -91,8 +91,11 @@ function Room({ initial }: { initial: RoomView }) {
               />
             </div>
           )}
-          <section className="tree-section">
-            <h2>トーナメント表</h2>
+          <section className="tree-section" aria-label="トーナメント表">
+            <div className="tree-head">
+              <p className="label">{room.gameNumber > 1 ? `第 ${room.gameNumber} 試合のお題` : "お題"}</p>
+              <h2>{room.topic}</h2>
+            </div>
             <TournamentTree
               matches={treeMatches}
               answerOf={answerOf}

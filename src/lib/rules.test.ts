@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vite-plus/test";
-import { answerBlocker, isRoomExpired, startBlocker } from "./rules";
+import { answerBlocker, isRoomExpired, startBlocker, submitBlocker } from "./rules";
 import { LIMITS } from "./types";
 
 describe("startBlocker", () => {
@@ -22,9 +22,19 @@ describe("answerBlocker", () => {
     expect(answerBlocker({ limitPerParticipant: 2, mine: 2, inRoom: 2 })).toMatch("2 つまで");
   });
   test("ルーム全体の上限は制限なしでも効く", () => {
-    expect(
-      answerBlocker({ limitPerParticipant: null, mine: 0, inRoom: LIMITS.answersPerRoom }),
-    ).toMatch("締め切り");
+    expect(answerBlocker({ limitPerParticipant: null, mine: 0, inRoom: LIMITS.answersPerRoom })).toMatch("締め切り");
+  });
+});
+
+describe("submitBlocker", () => {
+  test("下書きが無ければ提出できない", () => {
+    expect(submitBlocker({ mine: 0, submittedInRoom: 0 })).not.toBeNull();
+  });
+  test("提出済みと合わせてルームの上限に収まれば提出できる", () => {
+    expect(submitBlocker({ mine: 3, submittedInRoom: LIMITS.answersPerRoom - 3 })).toBeNull();
+  });
+  test("ほかの人が先に提出して上限を超えるなら、減らすよう促す", () => {
+    expect(submitBlocker({ mine: 3, submittedInRoom: LIMITS.answersPerRoom - 1 })).toMatch("あと 1 件");
   });
 });
 
