@@ -5,7 +5,7 @@ import { secretToken, sha256, shortId } from "../lib/ids";
 import { createMockJudge, type Judge, type JudgeResult } from "../lib/judge";
 import { isRoomExpired, parseDbTime, startBlocker } from "../lib/rules";
 import { maskMatches, playbackEnd, playbackOrder, slotStartLookup } from "../lib/schedule";
-import type { PastGame, PublicMatch, RoomView } from "../lib/types";
+import type { JudgeMode, PastGame, PublicMatch, RoomView } from "../lib/types";
 
 /** ルートでは `void/db` の db、Durable Object では createDb(env.DB) を渡す */
 export type Db = typeof defaultDb;
@@ -126,6 +126,8 @@ export async function loadRoomView(db: Db, roomId: string): Promise<RoomView | n
       hostParticipantId: room.hostParticipantId,
       gameNumber: game.number,
       topic: game.topic,
+      mode: game.mode,
+      rules: game.rules,
       status,
       maxAnswersPerParticipant: game.maxAnswersPerParticipant,
       championAnswerId,
@@ -167,7 +169,15 @@ export async function authenticate(db: Db, roomId: string, participantId: string
 }
 
 /** ルームと第 1 試合を作り、作成者を出題者として参加させる */
-export async function createRoom(db: Db, input: { topic: string; nickname: string; maxAnswersPerParticipant: number | null }) {
+/** 試合ごとに出題者が決める設定 */
+export type GameSettings = {
+  topic: string;
+  maxAnswersPerParticipant: number | null;
+  mode: JudgeMode;
+  rules: string | null;
+};
+
+export async function createRoom(db: Db, input: GameSettings & { nickname: string }) {
   const roomId = shortId();
   const participantId = shortId(12);
   const token = secretToken();
@@ -178,6 +188,8 @@ export async function createRoom(db: Db, input: { topic: string; nickname: strin
       number: 1,
       topic: input.topic,
       maxAnswersPerParticipant: input.maxAnswersPerParticipant,
+      mode: input.mode,
+      rules: input.rules,
     }),
     db.insert(participants).values({ id: participantId, roomId, nickname: input.nickname, tokenHash: await sha256(token) }),
   ]);
@@ -267,7 +279,13 @@ export async function judgeRound(db: Db, roomId: string, judge: Judge): Promise<
     const fallback = createMockJudge();
     const results = await Promise.all(
       playable.map(async (m): Promise<JudgeResult> => {
-        const input = { topic: game.topic, answerA: texts.get(m.answerAId!)!, answerB: texts.get(m.answerBId!)! };
+        const input = {
+          topic: game.topic,
+          answerA: texts.get(m.answerAId!)!,
+          answerB: texts.get(m.answerBId!)!,
+          mode: game.mode,
+          rules: game.rules,
+        };
         try {
           return await judge(input);
         } catch (error) {
@@ -321,7 +339,7 @@ export async function startNextGame(
   db: Db,
   roomId: string,
   hostId: string,
-  input: { topic: string; maxAnswersPerParticipant: number | null; removeParticipantIds: string[] },
+  input: GameSettings & { removeParticipantIds: string[] },
 ) {
   const { room, game } = await requireActiveRoom(db, roomId);
   if (room.hostParticipantId !== hostId) throw new RoomError(403, "次の試合を始められるのは出題者だけです");
@@ -335,6 +353,8 @@ export async function startNextGame(
         number: game.number + 1,
         topic: input.topic,
         maxAnswersPerParticipant: input.maxAnswersPerParticipant,
+        mode: input.mode,
+        rules: input.rules,
       }),
       ...(remove.length
         ? [

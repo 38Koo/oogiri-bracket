@@ -30,6 +30,12 @@ export const games = sqliteTable(
     topic: text("topic").notNull(),
     /** 1 人あたりの回答数の上限。null は制限なし */
     maxAnswersPerParticipant: integer("max_answers_per_participant"),
+    /** 審査のしかた。oogiri はより面白い回答、gachi はお題への答えとしての質で決める */
+    mode: text("mode", { enum: ["oogiri", "gachi"] })
+      .notNull()
+      .default("oogiri"),
+    /** 出題者が決めた回答のルール (自由記述・任意)。審査で違反した回答は負けになる */
+    rules: text("rules"),
     status: text("status", { enum: ["collecting", "running", "finished"] })
       .notNull()
       .default("collecting"),

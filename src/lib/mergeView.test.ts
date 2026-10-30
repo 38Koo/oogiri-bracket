@@ -19,6 +19,8 @@ const view = (p: Partial<RoomView> & { status?: RoomView["room"]["status"]; game
     hostParticipantId: "h",
     gameNumber: p.gameNumber ?? 1,
     topic: "t",
+    mode: "oogiri",
+    rules: null,
     status: p.status ?? "running",
     maxAnswersPerParticipant: null,
     championAnswerId: null,

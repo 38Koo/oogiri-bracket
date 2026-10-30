@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { fetch } from "void/client";
 import { ANSWER_LIMIT_CHOICES } from "../../lib/rules";
-import { LIMITS, type RoomView } from "../../lib/types";
+import { LIMITS, type JudgeMode, type RoomView } from "../../lib/types";
 import { authHeaders, errorMessage, type Credentials } from "../credentials";
 import { useHydrated } from "../useHydrated";
+import { JudgeSettingsFields } from "./JudgeSettings";
 
 /**
  * 決着後に出題者が次の試合を設定する。お題・1 人あたりの回答数・次も参加するメンバーを選ぶ。
@@ -21,6 +22,9 @@ export function NextGameForm({
   const hostId = view.room.hostParticipantId;
   const [topic, setTopic] = useState("");
   const [limit, setLimit] = useState<number | null>(view.room.maxAnswersPerParticipant);
+  // 審査のしかたとルールは、いまの試合のものを引き継いで直せるようにする
+  const [mode, setMode] = useState<JudgeMode>(view.room.mode);
+  const [rules, setRules] = useState(view.room.rules ?? "");
   const [removed, setRemoved] = useState<Set<string>>(new Set());
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -43,7 +47,7 @@ export function NextGameForm({
         method: "POST",
         params: { id: view.room.id },
         headers: authHeaders(credentials),
-        body: { topic, maxAnswersPerParticipant: limit, removeParticipantIds: [...removed] },
+        body: { topic, maxAnswersPerParticipant: limit, mode, rules, removeParticipantIds: [...removed] },
       });
       onStarted(next as RoomView);
       // 画面は game_started の配信 (または取り直し) で次の試合に切り替わる
@@ -82,6 +86,7 @@ export function NextGameForm({
           ))}
         </select>
       </div>
+      <JudgeSettingsFields idPrefix="next" mode={mode} rules={rules} onModeChange={setMode} onRulesChange={setRules} />
       <fieldset>
         <legend>次も参加するメンバー</legend>
         <ul className="member-list">

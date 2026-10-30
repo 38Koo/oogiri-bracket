@@ -117,6 +117,7 @@ label {
 }
 
 input[type="text"],
+textarea,
 select {
   width: 100%;
   font: inherit;
@@ -129,6 +130,7 @@ select {
 }
 
 input[type="text"]:focus,
+textarea:focus,
 select:focus {
   border-color: var(--blue);
   outline: 3px solid var(--blue-soft);
@@ -790,6 +792,85 @@ select:focus {
 
 .share-link {
   margin-bottom: 2.25rem;
+}
+
+/* ---------- 審査のしかたとルール ---------- */
+textarea {
+  resize: vertical;
+  line-height: 1.6;
+}
+
+.mode-picker {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr));
+  gap: 0.5rem;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.mode-picker legend {
+  font-weight: 700;
+  margin-bottom: 0.35rem;
+  padding: 0;
+}
+
+.mode-picker label {
+  display: flex;
+  gap: 0.6rem;
+  align-items: flex-start;
+  margin: 0;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+.mode-picker label.selected {
+  border-color: var(--blue);
+  background: var(--blue-soft);
+}
+
+.mode-picker input {
+  margin-top: 0.4rem;
+  accent-color: var(--blue);
+}
+
+.mode-picker .hint {
+  display: block;
+  font-weight: 400;
+  margin: 0.1rem 0 0;
+}
+
+.judge-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+  align-items: baseline;
+  margin: 0.5rem 0 0;
+  font-size: var(--step--1);
+  color: var(--muted);
+}
+
+.tree-head .judge-summary {
+  justify-content: center;
+}
+
+.mode-badge {
+  font-weight: 700;
+  padding: 0.1rem 0.6rem;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  color: var(--ink);
+}
+
+.mode-badge.oogiri {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+
+.judge-summary .rules {
+  overflow-wrap: anywhere;
 }
 
 /* ---------- 次の試合・途中参加・これまでの試合 ---------- */

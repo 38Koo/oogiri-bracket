@@ -1,6 +1,7 @@
 import { Link } from "@void/react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { History } from "../../src/client/components/History";
+import { JudgeSettingsSummary } from "../../src/client/components/JudgeSettings";
 import { JudgingShow } from "../../src/client/components/JudgingShow";
 import { JoinForm, Lobby } from "../../src/client/components/Lobby";
 import { ResultPanel } from "../../src/client/components/ResultPanel";
@@ -68,6 +69,7 @@ function Room({ initial }: { initial: RoomView }) {
           {status === "running" && !judging && `トーナメント中・回答 ${view.answers.length} 件`}
           {status === "finished" && `決着しました・回答 ${view.answers.length} 件`}
         </p>
+        <JudgeSettingsSummary mode={room.mode} rules={room.rules} />
       </header>
 
       {status === "collecting" ? (
@@ -95,6 +97,7 @@ function Room({ initial }: { initial: RoomView }) {
             <div className="tree-head">
               <p className="label">{room.gameNumber > 1 ? `第 ${room.gameNumber} 試合のお題` : "お題"}</p>
               <h2>{room.topic}</h2>
+              <JudgeSettingsSummary mode={room.mode} rules={room.rules} />
             </div>
             <TournamentTree
               matches={treeMatches}
