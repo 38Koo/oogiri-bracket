@@ -265,12 +265,68 @@ select:focus {
 }
 
 .my-answers li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
   font-weight: 700;
   font-size: var(--step-1);
   padding: 0.55rem 0.9rem;
   background: var(--tint);
   border-radius: var(--radius);
   overflow-wrap: anywhere;
+}
+
+.my-answers li .text {
+  min-width: 0;
+}
+
+.my-answers li.editing {
+  display: block;
+  padding: 0.4rem;
+}
+
+.my-answers li.editing input {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 提出した回答は確定したことが分かるよう、青い面にする */
+.my-answers.submitted li {
+  background: var(--blue-soft);
+}
+
+.my-answers .actions {
+  display: inline-flex;
+  gap: 0.75rem;
+  flex-shrink: 0;
+  font-size: var(--step--1);
+  font-weight: 400;
+}
+
+.link-btn {
+  font: inherit;
+  color: var(--blue);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.link-btn:disabled {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+.submit-box {
+  margin-top: 1.5rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--line);
+}
+
+.submit-box p {
+  margin: 0 0 0.75rem;
 }
 
 .people {

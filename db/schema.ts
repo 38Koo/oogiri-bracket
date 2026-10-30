@@ -60,6 +60,10 @@ export const participants = sqliteTable(
   (t) => [index("participants_room_idx").on(t.roomId)],
 );
 
+/**
+ * 回答。提出 (submittedAt) するまでは下書きで、本人が直したり消したりできる。
+ * 提出は参加者ごとに、その試合の回答をまとめて行い、取り消せない。トーナメントに出るのは提出した回答だけ。
+ */
 export const answers = sqliteTable(
   "answers",
   {
@@ -74,6 +78,7 @@ export const answers = sqliteTable(
       .notNull()
       .references(() => participants.id),
     text: text("text").notNull(),
+    submittedAt: text("submitted_at"),
     createdAt: createdAt(),
   },
   (t) => [index("answers_game_idx").on(t.gameId)],

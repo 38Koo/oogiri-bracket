@@ -19,7 +19,10 @@ export const MIN_ANSWERED_PARTICIPANTS = 2;
 export const ANSWER_LIMIT_CHOICES = [null, 1, 2, 3, 5, 10] as const;
 export const MAX_ANSWER_LIMIT = 20;
 
-/** 回答を追加できない理由。追加できるなら null。 */
+/**
+ * 回答 (下書き) を追加できない理由。追加できるなら null。
+ * inRoom は「提出済みの回答 + 自分の下書き」で数える (他人の下書きで枠が埋まらないように)。
+ */
 export function answerBlocker(opts: {
   limitPerParticipant: number | null;
   mine: number;
@@ -34,11 +37,20 @@ export function answerBlocker(opts: {
   return null;
 }
 
-/** トーナメントを始められない理由。始められるなら null。 */
+/** 自分の下書きをまとめて提出できない理由。提出できるなら null。 */
+export function submitBlocker(opts: { mine: number; submittedInRoom: number }): string | null {
+  if (opts.mine === 0) return "回答を書いてから提出してください";
+  if (opts.submittedInRoom + opts.mine > LIMITS.answersPerRoom) {
+    return `このお題の回答は ${LIMITS.answersPerRoom} 件までです。あと ${Math.max(LIMITS.answersPerRoom - opts.submittedInRoom, 0)} 件にしてください`;
+  }
+  return null;
+}
+
+/** トーナメントを始められない理由。始められるなら null。answerCounts は参加者ごとの提出済みの回答数。 */
 export function startBlocker(answerCounts: readonly number[]): string | null {
   const answered = answerCounts.filter((n) => n > 0).length;
   if (answered < MIN_ANSWERED_PARTICIPANTS) {
-    return `${MIN_ANSWERED_PARTICIPANTS} 人以上が回答すると始められます`;
+    return `${MIN_ANSWERED_PARTICIPANTS} 人以上が提出すると始められます`;
   }
   return null;
 }

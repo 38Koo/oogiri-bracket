@@ -5,6 +5,7 @@ import { authHeaders, errorMessage, saveCredentials } from "../credentials";
 import { LIMITS, type RoomView } from "../../lib/types";
 import { useHydrated } from "../useHydrated";
 import { AnswerDots } from "./AnswerDots";
+import { MyAnswers } from "./MyAnswers";
 import { startBlocker } from "../../lib/rules";
 
 type Props = {
@@ -13,7 +14,7 @@ type Props = {
   onJoined: (c: Credentials) => void;
   /** サーバーが返した最新の状態を画面に反映する */
   onChanged: (view: RoomView) => void;
-  /** 状態を取り直す (回答を出したあと、自分の回答数をすぐ反映するため) */
+  /** 状態を取り直す (提出したあと、自分の回答数をすぐ反映するため) */
   onRefresh: () => void;
 };
 
@@ -21,7 +22,7 @@ export function Lobby({ view, credentials, onJoined, onChanged, onRefresh }: Pro
   const roomId = view.room.id;
   const isHost = credentials?.participantId === view.room.hostParticipantId;
   const limit = view.room.maxAnswersPerParticipant;
-  const totalAnswers = view.participants.reduce((n, p) => n + p.answerCount, 0);
+  const submittedCount = view.participants.filter((p) => p.answerCount > 0).length;
   const blocker = startBlocker(view.participants.map((p) => p.answerCount));
 
   return (
@@ -29,14 +30,14 @@ export function Lobby({ view, credentials, onJoined, onChanged, onRefresh }: Pro
       <section>
         <ShareLink roomId={roomId} />
         {credentials ? (
-          <MyAnswers roomId={roomId} credentials={credentials} limit={limit} onPosted={onRefresh} />
+          <MyAnswers roomId={roomId} credentials={credentials} limit={limit} onSubmitted={onRefresh} />
         ) : (
           <JoinForm roomId={roomId} onJoined={onJoined} />
         )}
       </section>
 
       <aside>
-        <h2>参加者 {view.participants.length} 人・回答 {totalAnswers} 件</h2>
+        <h2>参加者 {view.participants.length} 人・提出 {submittedCount} 人</h2>
         <p className="hint">{limit === null ? "回答は 1 人何個でも出せます。" : `回答は 1 人 ${limit} つまでです。`}</p>
         <ul className="people">
           {view.participants.map((p) => (
@@ -134,89 +135,6 @@ export function JoinForm({
       </div>
       {error && <p className="error">{error}</p>}
     </form>
-  );
-}
-
-function MyAnswers({
-  roomId,
-  credentials,
-  limit,
-  onPosted,
-}: {
-  roomId: string;
-  credentials: Credentials;
-  limit: number | null;
-  onPosted: () => void;
-}) {
-  const [mine, setMine] = useState<Array<{ id: number; text: string }>>([]);
-  const [text, setText] = useState("");
-  const [pending, setPending] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch("/api/rooms/:id/answers", { params: { id: roomId }, headers: authHeaders(credentials) })
-      .then((rows) => setMine(rows))
-      .catch((e) => setError(errorMessage(e)));
-  }, [roomId, credentials]);
-
-  async function onSubmit(event: React.FormEvent) {
-    event.preventDefault();
-    setPending(true);
-    setError(null);
-    try {
-      const created = await fetch("/api/rooms/:id/answers", {
-        method: "POST",
-        params: { id: roomId },
-        headers: authHeaders(credentials),
-        body: { text },
-      });
-      setMine((m) => [...m, created]);
-      setText("");
-      onPosted();
-    } catch (e) {
-      setError(errorMessage(e));
-    } finally {
-      setPending(false);
-    }
-  }
-
-  const remaining = limit === null ? null : limit - mine.length;
-  return (
-    <section>
-      <h2>あなたの回答</h2>
-      {mine.length > 0 && (
-        <ul className="my-answers">
-          {mine.map((a) => (
-            <li key={a.id}>{a.text}</li>
-          ))}
-        </ul>
-      )}
-      {remaining === null || remaining > 0 ? (
-        <form onSubmit={onSubmit}>
-          <label htmlFor="answer" className="visually-hidden">
-            回答
-          </label>
-          <div className="row">
-            <input
-              id="answer"
-              type="text"
-              required
-              maxLength={LIMITS.answer}
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder={mine.length === 0 ? "思いついた回答をどうぞ" : "もうひとつ"}
-            />
-            <button className="btn" disabled={pending}>
-              回答する
-            </button>
-          </div>
-          <p className="hint">{remaining === null ? "思いつくだけ出せます。" : `あと ${remaining} つ出せます。`}</p>
-        </form>
-      ) : (
-        <p className="hint">回答は出し切りました。開始を待ちましょう。</p>
-      )}
-      {error && <p className="error">{error}</p>}
-    </section>
   );
 }
 

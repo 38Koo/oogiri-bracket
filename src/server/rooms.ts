@@ -1,5 +1,5 @@
 import { answers, games, matches, participants, rooms, type Match } from "@schema";
-import { and, asc, count, desc, eq, inArray, isNull, sql, type db as defaultDb } from "void/db";
+import { and, asc, count, desc, eq, inArray, isNotNull, isNull, sql, type db as defaultDb } from "void/db";
 import { advance, buildBracket, resolveInitialByes } from "../lib/bracket";
 import { secretToken, sha256, shortId } from "../lib/ids";
 import { createMockJudge, type Judge, type JudgeResult } from "../lib/judge";
@@ -76,7 +76,11 @@ export async function loadRoomView(db: Db, roomId: string): Promise<RoomView | n
     db
       .select({ id: participants.id, nickname: participants.nickname, answerCount: count(answers.id) })
       .from(participants)
-      .leftJoin(answers, and(eq(answers.participantId, participants.id), eq(answers.gameId, game.id)))
+      // 下書きは本人にしか見せないので、数えるのは提出済みの回答だけ
+      .leftJoin(
+        answers,
+        and(eq(answers.participantId, participants.id), eq(answers.gameId, game.id), isNotNull(answers.submittedAt)),
+      )
       .where(and(eq(participants.roomId, roomId), isNull(participants.removedAt)))
       .groupBy(participants.id)
       .orderBy(asc(participants.createdAt)),
@@ -86,7 +90,7 @@ export async function loadRoomView(db: Db, roomId: string): Promise<RoomView | n
           .select({ id: answers.id, participantId: answers.participantId, nickname: participants.nickname, text: answers.text })
           .from(answers)
           .innerJoin(participants, eq(answers.participantId, participants.id))
-          .where(eq(answers.gameId, game.id))
+          .where(and(eq(answers.gameId, game.id), isNotNull(answers.submittedAt)))
           .orderBy(asc(answers.id)),
     db.select().from(matches).where(eq(matches.gameId, game.id)).orderBy(asc(matches.round), asc(matches.slot)),
     loadHistory(db, roomId, game.number),
@@ -189,14 +193,7 @@ export async function startTournament(db: Db, roomId: string, hostId: string, rn
   if (room.hostParticipantId !== hostId) throw new RoomError(403, "開始できるのは出題者だけです");
   if (game.status !== "collecting") throw new RoomError(409, "すでに開始されています");
 
-  const gameAnswers = await db
-    .select({ id: answers.id, participantId: answers.participantId })
-    .from(answers)
-    .innerJoin(participants, eq(answers.participantId, participants.id))
-    .where(and(eq(answers.gameId, game.id), isNull(participants.removedAt)));
-  const perParticipant = new Map<string, number>();
-  for (const a of gameAnswers) perParticipant.set(a.participantId, (perParticipant.get(a.participantId) ?? 0) + 1);
-  const blocker = startBlocker([...perParticipant.values()]);
+  const blocker = startBlocker([...countByParticipant(await submittedAnswers(db, game.id)).values()]);
   if (blocker) throw new RoomError(400, blocker);
 
   // 二重開始を防ぐため、status の条件付き更新で排他する
@@ -207,6 +204,8 @@ export async function startTournament(db: Db, roomId: string, hostId: string, rn
     .returning({ id: games.id });
   if (claimed.length === 0) throw new RoomError(409, "すでに開始されています");
 
+  // 提出は募集中にしか通らないので、締め切ったあとに読み直せば出場者が確定する
+  const gameAnswers = await submittedAnswers(db, game.id);
   const rows = buildBracket(
     gameAnswers.map((a) => a.id),
     rng,
@@ -223,6 +222,21 @@ export async function startTournament(db: Db, roomId: string, hostId: string, rn
   for (let i = 0; i < rows.length; i += 8) await db.insert(matches).values(rows.slice(i, i + 8));
   await touchRoom(db, roomId);
   return loadRoomView(db, roomId);
+}
+
+/** 試合に提出された回答 (外された参加者の分は除く) */
+async function submittedAnswers(db: Db, gameId: number) {
+  return db
+    .select({ id: answers.id, participantId: answers.participantId })
+    .from(answers)
+    .innerJoin(participants, eq(answers.participantId, participants.id))
+    .where(and(eq(answers.gameId, gameId), isNotNull(answers.submittedAt), isNull(participants.removedAt)));
+}
+
+function countByParticipant(rows: Array<{ participantId: string }>) {
+  const counts = new Map<string, number>();
+  for (const r of rows) counts.set(r.participantId, (counts.get(r.participantId) ?? 0) + 1);
+  return counts;
 }
 
 /**
