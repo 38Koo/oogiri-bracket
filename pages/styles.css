@@ -536,9 +536,23 @@ select:focus {
 }
 
 /* ---------- トーナメント表 ---------- */
-.tree-section h2 {
-  font-size: var(--step-1);
+/* お題を表のすぐ上に置き、表をスクショしたときに一緒に写るようにする */
+.tree-head {
   margin-bottom: 1rem;
+  /* 表は中央寄せなので、表だけを切り取っても入るよう見出しも中央に置く */
+  text-align: center;
+}
+
+.tree-head .label {
+  color: var(--muted);
+  font-size: var(--step--1);
+  margin: 0;
+}
+
+.tree-head h2 {
+  font-weight: 900;
+  font-size: var(--step-2);
+  overflow-wrap: anywhere;
 }
 
 .tree-scroll {
