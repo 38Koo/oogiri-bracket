@@ -2,15 +2,18 @@ import { useRouter } from "@void/react";
 import { useState } from "react";
 import { fetch } from "void/client";
 import { errorMessage, saveCredentials } from "../src/client/credentials";
+import { JudgeSettingsFields } from "../src/client/components/JudgeSettings";
 import { useHydrated } from "../src/client/useHydrated";
 import { ANSWER_LIMIT_CHOICES } from "../src/lib/rules";
-import { LIMITS } from "../src/lib/types";
+import { LIMITS, type JudgeMode } from "../src/lib/types";
 
 export default function HomePage() {
   const router = useRouter();
   const [topic, setTopic] = useState("");
   const [nickname, setNickname] = useState("");
   const [limit, setLimit] = useState<number | null>(null);
+  const [mode, setMode] = useState<JudgeMode>("oogiri");
+  const [rules, setRules] = useState("");
   const [pending, setPending] = useState(false);
   const hydrated = useHydrated();
   const [error, setError] = useState<string | null>(null);
@@ -20,7 +23,10 @@ export default function HomePage() {
     setPending(true);
     setError(null);
     try {
-      const created = await fetch("/api/rooms", { method: "POST", body: { topic, nickname, maxAnswersPerParticipant: limit } });
+      const created = await fetch("/api/rooms", {
+        method: "POST",
+        body: { topic, nickname, maxAnswersPerParticipant: limit, mode, rules },
+      });
       saveCredentials(created.roomId, { participantId: created.participantId, token: created.token });
       router.visit(`/r/${created.roomId}`);
     } catch (e) {
@@ -74,6 +80,7 @@ export default function HomePage() {
           </select>
           <p className="hint">全体では {LIMITS.answersPerRoom} 件までです。</p>
         </div>
+        <JudgeSettingsFields idPrefix="new" mode={mode} rules={rules} onModeChange={setMode} onRulesChange={setRules} />
         {error && <p className="error">{error}</p>}
         <div>
           <button className="btn" disabled={pending || !hydrated}>

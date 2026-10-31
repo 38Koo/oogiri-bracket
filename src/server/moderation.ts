@@ -26,6 +26,6 @@ export async function rejectIfInappropriate(c: Context, input: ModerationInput):
   }
   const [hit] = result.blocked;
   if (!hit) return null;
-  console.info(`[moderation] blocked field=${hit.field} p=${hit.probability.toFixed(2)}`);
-  return c.json({ error: moderationMessage(hit.field), field: hit.field }, 400);
+  console.info(`[moderation] blocked field=${hit.field} reason=${hit.reason ?? "inappropriate"} p=${hit.probability.toFixed(2)}`);
+  return c.json({ error: moderationMessage(hit.field, hit.reason), field: hit.field }, 400);
 }
